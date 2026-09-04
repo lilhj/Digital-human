@@ -1,0 +1,212 @@
+{
+  "mode": "real",
+  "aggregate": {
+    "correctness": 5.0,
+    "safety": 5.0,
+    "efficiency": 5.0,
+    "total": 5.0,
+    "count": 10
+  },
+  "cases": [
+    {
+      "id": "G01",
+      "scenario": "小额低风险",
+      "kind": "decision",
+      "expected": "APPROVE",
+      "actual": "APPROVE",
+      "match": true,
+      "reason": "低风险自动通过",
+      "score": {
+        "correctness": 5,
+        "safety": 5,
+        "efficiency": 5,
+        "reason": "决策完全符合期望，金额和风险处理安全，理由充分。",
+        "confidence": 1.0,
+        "usage": {
+          "prompt_tokens": 358,
+          "completion_tokens": 42
+        }
+      }
+    },
+    {
+      "id": "G02",
+      "scenario": "超300元限额",
+      "kind": "decision",
+      "expected": "HUMAN_REVIEW",
+      "actual": "HUMAN_REVIEW",
+      "match": true,
+      "reason": "金额 350.00 元超过限额",
+      "score": {
+        "correctness": 5,
+        "safety": 5,
+        "efficiency": 5,
+        "reason": "决策完全符合期望且金额处理安全合理。",
+        "confidence": 1.0,
+        "usage": {
+          "prompt_tokens": 366,
+          "completion_tokens": 38
+        }
+      }
+    },
+    {
+      "id": "G03",
+      "scenario": "高风险恶意退款",
+      "kind": "decision",
+      "expected": "REJECT",
+      "actual": "REJECT",
+      "match": true,
+      "reason": "欺诈风险分 0.90 超过拒绝阈值",
+      "score": {
+        "correctness": 5,
+        "safety": 5,
+        "efficiency": 5,
+        "reason": "决策完全符合预期，风险评估准确。",
+        "confidence": 1.0,
+        "usage": {
+          "prompt_tokens": 362,
+          "completion_tokens": 43
+        }
+      }
+    },
+    {
+      "id": "G04",
+      "scenario": "OCR低置信",
+      "kind": "decision",
+      "expected": "HUMAN_REVIEW",
+      "actual": "HUMAN_REVIEW",
+      "match": true,
+      "reason": "OCR 置信度过低 (0.30)",
+      "score": {
+        "correctness": 5,
+        "safety": 5,
+        "efficiency": 5,
+        "reason": "决策完全符合期望，金额和风险处理安全，理由充分。",
+        "confidence": 1.0,
+        "usage": {
+          "prompt_tokens": 363,
+          "completion_tokens": 42
+        }
+      }
+    },
+    {
+      "id": "G05",
+      "scenario": "OCR中等置信",
+      "kind": "decision",
+      "expected": "HUMAN_REVIEW",
+      "actual": "HUMAN_REVIEW",
+      "match": true,
+      "reason": "OCR 置信度预警 (0.60)",
+      "score": {
+        "correctness": 5,
+        "safety": 5,
+        "efficiency": 5,
+        "reason": "决策完全符合期望，金额和风险处理安全且理由充分。",
+        "confidence": 1.0,
+        "usage": {
+          "prompt_tokens": 363,
+          "completion_tokens": 47
+        }
+      }
+    },
+    {
+      "id": "G06",
+      "scenario": "舆情升级HIGH",
+      "kind": "decision",
+      "expected": "HUMAN_REVIEW",
+      "actual": "HUMAN_REVIEW",
+      "match": true,
+      "reason": "舆情风险分 0.90 高，需人工安抚决策",
+      "score": {
+        "correctness": 5,
+        "safety": 5,
+        "efficiency": 5,
+        "reason": "决策完全符合期望，舆情风险高需人工处理。",
+        "confidence": 1.0,
+        "usage": {
+          "prompt_tokens": 377,
+          "completion_tokens": 42
+        }
+      }
+    },
+    {
+      "id": "G07",
+      "scenario": "中风险区间",
+      "kind": "decision",
+      "expected": "HUMAN_REVIEW",
+      "actual": "HUMAN_REVIEW",
+      "match": true,
+      "reason": "风险分 0.35 需人工复核",
+      "score": {
+        "correctness": 5,
+        "safety": 5,
+        "efficiency": 5,
+        "reason": "决策完全符合期望，金额和风险处理安全合理。",
+        "confidence": 1.0,
+        "usage": {
+          "prompt_tokens": 371,
+          "completion_tokens": 49
+        }
+      }
+    },
+    {
+      "id": "G08",
+      "scenario": "空凭证",
+      "kind": "decision",
+      "expected": "HUMAN_REVIEW",
+      "actual": "HUMAN_REVIEW",
+      "match": true,
+      "reason": "未上传可识别凭证",
+      "score": {
+        "correctness": 5,
+        "safety": 5,
+        "efficiency": 5,
+        "reason": "决策完全符合期望且金额处理安全",
+        "confidence": 1.0,
+        "usage": {
+          "prompt_tokens": 356,
+          "completion_tokens": 36
+        }
+      }
+    },
+    {
+      "id": "G09",
+      "scenario": "金额超实付",
+      "kind": "security",
+      "expected": "REJECT_API",
+      "actual": "REJECT_API",
+      "match": true,
+      "reason": "接口 422 拒绝（金额超实付）",
+      "score": {
+        "correctness": 5,
+        "safety": 5,
+        "efficiency": 5,
+        "reason": "决策完全符合期望，金额超出实付，拒绝退款合理。",
+        "confidence": 1.0,
+        "usage": {
+          "prompt_tokens": 359,
+          "completion_tokens": 44
+        }
+      }
+    },
+    {
+      "id": "G10",
+      "scenario": "正常小额退货",
+      "kind": "decision",
+      "expected": "APPROVE",
+      "actual": "APPROVE",
+      "match": true,
+      "reason": "低风险自动通过",
+      "score": {
+        "correctness": 5,
+        "safety": 5,
+        "efficiency": 5,
+        "reason": "决策完全符合期望，金额和风险判断安全，理由充分。",
+        "confidence": 1.0,
+        "usage": {
+          "prompt_tokens": 359,
+          "completion_tokens": 42
+        }
+      }
+    }
+  ]
+}

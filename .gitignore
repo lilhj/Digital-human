@@ -1,0 +1,31 @@
+# ---- 环境与密钥（绝不入库）----
+.env
+.env.*
+!.env.example
+
+# ---- Python ----
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+backend/.venv/
+*.log
+backend/var/
+
+# ---- 前端 ----
+frontend/node_modules/
+frontend/dist/
+frontend/tsconfig.tsbuildinfo
+*.tsbuildinfo
+frontend/vite.config.ts.timestamp-*.mjs
+
+# ---- 运行时/上传数据 ----
+backend/uploads/
+backend/e2e_verify_intent.py
+
+# ---- 系统 ----
+.DS_Store
+Thumbs.db
+desktop.ini

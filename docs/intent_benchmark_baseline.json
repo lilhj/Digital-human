@@ -1,0 +1,23 @@
+{
+  "samples": 110,
+  "rule_hit_rate": 0.8181818181818181,
+  "Recall": 1.0,
+  "HallucinationRate": 0.0,
+  "TTFT": 145.45454545454547,
+  "TokenReduction": 0.7248062015503876,
+  "TTFTReduction": 0.8181818181818181,
+  "hybrid": {
+    "recall": 1.0,
+    "hallucination_rate": 0.0,
+    "llm_calls": 20,
+    "total_tokens": 142,
+    "avg_ttft_ms": 145.45454545454547
+  },
+  "pure_llm": {
+    "recall": 0.9545454545454546,
+    "hallucination_rate": 0.045454545454545456,
+    "llm_calls": 110,
+    "total_tokens": 516,
+    "avg_ttft_ms": 800.0
+  }
+}

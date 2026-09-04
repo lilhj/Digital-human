@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>员工登录页 · 设计稿（客诉舆情退赔决策系统）</title>
+<style>
+  :root{
+    --bg: #eef1f6;
+    --panel-grad-a: #0b3d91;
+    --panel-grad-b: #0d6efd;
+    --panel-grad-c: #12b4c8;
+    --panel-ink: #ffffff;
+    --panel-ink-dim: rgba(255,255,255,.72);
+    --panel-line: rgba(255,255,255,.16);
+    --card: #ffffff;
+    --card-border: #e6e9f0;
+    --ink: #1a1d24;
+    --ink-2: #5b6478;
+    --ink-3: #99a1b3;
+    --primary: #0d6efd;
+    --input-bg: #f7f9fc;
+    --input-border: #dfe4ee;
+    --danger: #dc3545;
+    --danger-bg: #fdecee;
+    --ok: #12a150;
+    --shadow: 0 24px 60px rgba(16,24,40,.14);
+  }
+  body[data-theme="dark"]{
+    --bg: #0d1017;
+    --panel-grad-a: #06152f;
+    --panel-grad-b: #0d2b5c;
+    --panel-grad-c: #0d6efd;
+    --card: #141924;
+    --card-border: #222a38;
+    --ink: #e8ecf5;
+    --ink-2: #97a1b6;
+    --ink-3: #6b768c;
+    --input-bg: #0f141d;
+    --input-border: #263041;
+    --danger-bg: #2a1418;
+    --shadow: 0 24px 60px rgba(0,0,0,.5);
+  }
+
+  *{ box-sizing: border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    background: var(--bg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    color: var(--ink);
+    display:flex; align-items:center; justify-content:center;
+    padding: 32px;
+    transition: background .25s ease, color .25s ease;
+  }
+
+  /* ---------- 切换主题的小控件（设计稿专用，不进生产） ---------- */
+  .theme-switch{
+    position: fixed; top: 18px; right: 18px; z-index: 20;
+    display:flex; gap:4px; padding:4px; border-radius:999px;
+    background: var(--card); border:1px solid var(--card-border);
+    box-shadow: 0 6px 18px rgba(16,24,40,.10);
+    font-size:12px;
+  }
+  .theme-switch button{
+    border:0; cursor:pointer; padding:6px 12px; border-radius:999px;
+    background:transparent; color: var(--ink-2); font-size:12px;
+  }
+  .theme-switch button.on{ background: var(--primary); color:#fff; }
+
+  /* ---------- 主体：左右分屏 ---------- */
+  .shell{
+    width: 100%; max-width: 1080px; min-height: 620px;
+    display: grid; grid-template-columns: 1.15fr 1fr;
+    background: var(--card); border: 1px solid var(--card-border);
+    border-radius: 20px; overflow: hidden; box-shadow: var(--shadow);
+  }
+
+  /* ===== 左：品牌叙事区 ===== */
+  .brand{
+    position: relative; overflow:hidden; padding: 44px 44px 36px;
+    color: var(--panel-ink);
+    background:
+      radial-gradient(1100px 520px at 8% -10%, rgba(255,255,255,.20), transparent 60%),
+      linear-gradient(150deg, var(--panel-grad-a) 0%, var(--panel-grad-b) 55%, var(--panel-grad-c) 100%);
+    display:flex; flex-direction:column;
+  }
+  /* 抽象几何：工单流线 */
+  .brand::before{
+    content:""; position:absolute; inset:0;
+    background-image:
+      linear-gradient(var(--panel-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--panel-line) 1px, transparent 1px);
+    background-size: 46px 46px;
+    mask-image: radial-gradient(720px 420px at 88% 8%, #000 0%, transparent 78%);
+    -webkit-mask-image: radial-gradient(720px 420px at 88% 8%, #000 0%, transparent 78%);
+    opacity:.55; pointer-events:none;
+  }
+  .brand > *{ position: relative; z-index: 1; }
+
+  .logo{ display:flex; align-items:center; gap:12px; }
+  .logo-mark{
+    width:40px; height:40px; border-radius:12px; flex:none;
+    background: rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.30);
+    display:flex; align-items:center; justify-content:center;
+    font-weight:800; font-size:18px; letter-spacing:.5px;
+    backdrop-filter: blur(6px);
+  }
+  .logo-txt b{ display:block; font-size:17px; letter-spacing:.6px; }
+  .logo-txt span{ display:block; font-size:11px; color: var(--panel-ink-dim); letter-spacing:1.6px; text-transform:uppercase; }
+
+  .hero{ margin-top: 46px; }
+  .hero h1{ margin:0 0 10px; font-size:30px; line-height:1.32; font-weight:700; letter-spacing:.5px; }
+  .hero p{ margin:0; font-size:14px; line-height:1.85; color: var(--panel-ink-dim); max-width: 380px; }
+
+  .chips{ margin-top:22px; display:flex; flex-wrap:wrap; gap:8px; }
+  .chip{
+    font-size:12px; padding:5px 11px; border-radius:999px;
+    background: rgba(255,255,255,.14); border:1px solid rgba(255,255,255,.26);
+    color:#fff; backdrop-filter: blur(4px);
+  }
+
+  .kpis{ margin-top: 42px; display:grid; grid-template-columns: repeat(4,1fr); gap:10px; }
+  .kpi{
+    background: rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.20);
+    border-radius: 12px; padding:12px 12px 11px; backdrop-filter: blur(6px);
+  }
+  .kpi b{ display:block; font-size:20px; letter-spacing:.3px; }
+  .kpi span{ display:block; margin-top:3px; font-size:11px; color: var(--panel-ink-dim); }
+
+  /* 实时工单流（mock 动效） */
+  .feed{ margin-top:auto; padding-top:36px; }
+  .feed-hd{ display:flex; align-items:center; gap:8px; font-size:12px; color: var(--panel-ink-dim); margin-bottom:10px; }
+  .dot{ width:7px; height:7px; border-radius:50%; background:#31d158; box-shadow:0 0 0 4px rgba(49,209,88,.22); animation: pulse 1.8s infinite; }
+  @keyframes pulse{ 0%,100%{ box-shadow:0 0 0 3px rgba(49,209,88,.22);} 50%{ box-shadow:0 0 0 7px rgba(49,209,88,.06);} }
+  .feed-list{ display:flex; flex-direction:column; gap:8px; }
+  .feed-item{
+    display:flex; align-items:center; gap:10px; font-size:12.5px;
+    background: rgba(255,255,255,.10); border:1px solid rgba(255,255,255,.16);
+    border-radius:10px; padding:9px 12px; backdrop-filter: blur(4px);
+    animation: slideUp .5s ease both;
+  }
+  .feed-item .tag{ font-size:10.5px; padding:2px 7px; border-radius:6px; background:rgba(255,255,255,.20); flex:none; }
+  .feed-item .amt{ margin-left:auto; font-weight:700; letter-spacing:.3px; }
+  .feed-item .t{ color: var(--panel-ink-dim); font-size:11px; }
+  @keyframes slideUp{ from{ opacity:0; transform: translateY(10px);} to{ opacity:1; transform:none;} }
+
+  .trust{
+    margin-top: 22px; padding-top:16px; border-top:1px solid rgba(255,255,255,.16);
+    display:flex; gap:18px; font-size:11.5px; color: var(--panel-ink-dim);
+  }
+  .trust i{ font-style:normal; margin-right:5px; }
+
+  /* ===== 右：表单区 ===== */
+  .form{ padding: 52px 48px; display:flex; flex-direction:column; }
+  .form h2{ margin:0 0 6px; font-size:22px; letter-spacing:.4px; }
+  .form .sub{ margin:0 0 26px; font-size:13px; color: var(--ink-2); }
+
+  .field{ margin-bottom: 16px; }
+  .field label{ display:block; font-size:12.5px; color: var(--ink-2); margin-bottom:6px; }
+  .control{ position: relative; }
+  .control svg{ position:absolute; left:12px; top:50%; transform:translateY(-50%); opacity:.5; }
+  .control input{
+    width:100%; padding: 11px 40px 11px 38px; font-size:14px; color: var(--ink);
+    background: var(--input-bg); border:1px solid var(--input-border);
+    border-radius:10px; outline:none; transition:.18s; font-family:inherit;
+  }
+  .control input:focus{ border-color: var(--primary); background: var(--card); box-shadow: 0 0 0 3px rgba(13,110,253,.13); }
+  .peek{ position:absolute; right:8px; top:50%; transform:translateY(-50%);
+    border:0; background:transparent; cursor:pointer; color: var(--ink-3); font-size:12px; padding:6px; }
+
+  .row{ display:flex; align-items:center; justify-content:space-between; margin: 4px 0 22px; font-size:12.5px; }
+  .row a{ color: var(--primary); text-decoration:none; }
+  .remember{ display:flex; align-items:center; gap:7px; color: var(--ink-2); cursor:pointer; }
+  .remember input{ accent-color: var(--primary); }
+
+  .submit{
+    width:100%; padding: 12px; font-size:15px; font-weight:600; color:#fff; cursor:pointer;
+    background: linear-gradient(180deg,#2b83ff,#0b62e6);
+    border:0; border-radius:10px; letter-spacing:1px;
+    box-shadow: 0 8px 20px rgba(13,110,253,.28);
+    transition:.18s; font-family:inherit;
+  }
+  .submit:hover{ transform: translateY(-1px); box-shadow: 0 12px 26px rgba(13,110,253,.34); }
+  .submit:active{ transform:none; }
+
+  .alert{
+    display:flex; align-items:center; gap:8px; margin-top:16px; padding:10px 12px;
+    background: var(--danger-bg); border:1px solid rgba(220,53,69,.28); color: var(--danger);
+    border-radius:9px; font-size:12.5px;
+  }
+
+  .divider{ display:flex; align-items:center; gap:12px; margin: 26px 0 18px; color: var(--ink-3); font-size:11.5px; }
+  .divider::before, .divider::after{ content:""; flex:1; height:1px; background: var(--card-border); }
+
+  .demo-hd{ font-size:12px; color: var(--ink-2); margin-bottom:9px; }
+  .demo-hd span{ color: var(--ink-3); }
+  .demos{ display:flex; flex-wrap:wrap; gap:8px; }
+  .demo{
+    cursor:pointer; text-align:left; font-family:inherit;
+    background: var(--input-bg); border:1px solid var(--input-border); color: var(--ink-2);
+    border-radius:9px; padding:8px 11px; font-size:12px; line-height:1.45; transition:.16s;
+  }
+  .demo b{ display:block; color: var(--ink); font-size:12.5px; }
+  .demo:hover{ border-color: var(--primary); transform: translateY(-1px); }
+  .demo.on{ border-color: var(--primary); background: rgba(13,110,253,.08); box-shadow: 0 0 0 3px rgba(13,110,253,.10); }
+  .demo.on b{ color: var(--primary); }
+
+  .foot{ margin-top:auto; padding-top:26px; display:flex; align-items:center; justify-content:space-between;
+    font-size:11.5px; color: var(--ink-3); }
+  .foot a{ color: var(--primary); text-decoration:none; font-weight:600; }
+
+  @media (max-width: 900px){
+    .shell{ grid-template-columns: 1fr; }
+    .brand{ padding: 32px; min-height: 300px; }
+    .hero h1{ font-size:24px; }
+    .kpis{ grid-template-columns: repeat(2,1fr); }
+    .form{ padding: 34px 28px; }
+    .feed, .trust{ display:none; }
+  }
+</style>
+</head>
+<body data-theme="light">
+
+<div class="theme-switch">
+  <button class="on" data-set="light">浅色</button>
+  <button data-set="dark">深色</button>
+</div>
+
+<div class="shell">
+
+  <!-- 左：品牌叙事区 -->
+  <aside class="brand">
+    <div class="logo">
+      <div class="logo-mark">退</div>
+      <div class="logo-txt">
+        <b>客诉舆情退赔决策系统</b>
+        <span>Refund &amp; Sentiment Decision Platform</span>
+      </div>
+    </div>
+
+    <div class="hero">
+      <h1>让每一笔退赔决策<br/>都有据可依</h1>
+      <p>多 Agent 协同调度 · 意图双通道识别 · 全程敏感信息脱敏 · 人工断点干预，把退款风险挡在资损之前。</p>
+    </div>
+
+    <div class="chips">
+      <span class="chip">8 节点决策流水线</span>
+      <span class="chip">金额边界护栏</span>
+      <span class="chip">舆情风险合并判定</span>
+      <span class="chip">LLM-as-Judge 评测</span>
+    </div>
+
+    <div class="kpis">
+      <div class="kpi"><b>128,640</b><span>累计决策工单</span></div>
+      <div class="kpi"><b>92.3%</b><span>意图召回率</span></div>
+      <div class="kpi"><b>1.4%</b><span>幻觉率</span></div>
+      <div class="kpi"><b>1.8s</b><span>平均决策时延</span></div>
+    </div>
+
+    <div class="feed">
+      <div class="feed-hd"><span class="dot"></span>实时决策流 · 演示数据</div>
+      <div class="feed-list">
+        <div class="feed-item">
+          <span class="tag">退款</span> 手机壳破损，OCR 凭证已核验 <span class="t">· 1.2s</span>
+          <span class="amt">¥29.00</span>
+        </div>
+        <div class="feed-item">
+          <span class="tag">换货</span> 舆情中风险，已转人工复核 <span class="t">· 挂起</span>
+          <span class="amt">¥1,299</span>
+        </div>
+        <div class="feed-item">
+          <span class="tag">退货</span> 金额超护栏阈值，拦截待批 <span class="t">· 主管</span>
+          <span class="amt">¥4,999</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="trust">
+      <span><i>🔒</i>数据全程脱敏</span>
+      <span><i>🛡️</i>防资损护栏</span>
+      <span><i>📊</i>决策可追溯</span>
+    </div>
+  </aside>
+
+  <!-- 右：表单区 -->
+  <main class="form">
+    <h2>登录运营控制台</h2>
+    <p class="sub">请使用企业账号登录，运营侧数据与买家侧相互隔离。</p>
+
+    <form onsubmit="return false;">
+      <div class="field">
+        <label for="u">账号</label>
+        <div class="control">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>
+          <input id="u" value="manager" autocomplete="username" />
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="p">密码</label>
+        <div class="control">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+          <input id="p" type="password" value="manager123" autocomplete="current-password" />
+          <button type="button" class="peek" onclick="peek(this)">显示</button>
+        </div>
+      </div>
+
+      <div class="row">
+        <label class="remember"><input type="checkbox" checked /> 记住我</label>
+        <a href="#">忘记密码？</a>
+      </div>
+
+      <button class="submit">登 录</button>
+
+      <div class="alert" id="alert" style="display:none">
+        <span>⚠️</span><span>账号或密码错误，请重新输入（示例错误态）</span>
+      </div>
+    </form>
+
+    <div class="divider">或</div>
+
+    <div class="demo-hd">演示账号 <span>· 点击一键填充</span></div>
+    <div class="demos">
+      <button class="demo on" data-u="manager" data-p="manager123"><b>主管 · 张伟</b>manager / manager123</button>
+      <button class="demo" data-u="csr" data-p="csr123"><b>客服 · 李娜</b>csr / csr123</button>
+      <button class="demo" data-u="admin" data-p="admin123"><b>管理员 · 王强</b>admin / admin123</button>
+    </div>
+
+    <div class="foot">
+      <span>买家请前往 <a href="/buyer">米家 →</a></span>
+      <span>v4.0 · 内部演示环境</span>
+    </div>
+  </main>
+
+</div>
+
+<script>
+  // 设计稿交互：主题切换 / 演示账号一键填充 / 密码可见 / 错误态演示
+  document.querySelectorAll('.theme-switch button').forEach(b => {
+    b.onclick = () => {
+      document.body.dataset.theme = b.dataset.set;
+      document.querySelectorAll('.theme-switch button').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+    };
+  });
+
+  const u = document.getElementById('u'), p = document.getElementById('p');
+  document.querySelectorAll('.demo').forEach(b => {
+    b.onclick = () => {
+      u.value = b.dataset.u; p.value = b.dataset.p;
+      document.querySelectorAll('.demo').forEach(x => x.classList.remove('on'));
+      b.classList.add('on');
+      document.getElementById('alert').style.display = 'none';
+    };
+  });
+
+  function peek(btn){
+    const isPwd = p.type === 'password';
+    p.type = isPwd ? 'text' : 'password';
+    btn.textContent = isPwd ? '隐藏' : '显示';
+  }
+
+  // 点登录时闪一下错误态（纯演示，真实提交由 React 接管）
+  document.querySelector('.submit').onclick = () => {
+    const a = document.getElementById('alert');
+    a.style.display = 'flex';
+    setTimeout(() => { a.style.display = 'none'; }, 2600);
+  };
+</script>
+</body>
+</html>

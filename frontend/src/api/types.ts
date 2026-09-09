@@ -370,3 +370,27 @@ export interface LangfuseTracesResponse {
   total_observations?: number | null;
   traces: LangfuseTrace[];
 }
+
+/* ---------- ADMIN 用户管理（phase12） ---------- */
+
+export interface AdminUser {
+  id: number;
+  username: string;
+  role: string; // CSR / MANAGER / ADMIN
+  display_name: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface AdminCustomer {
+  id: number;
+  phone: string;
+  nickname: string | null;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface AdminActionResp {
+  ok: boolean;
+  message: string;
+}

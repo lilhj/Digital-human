@@ -25,7 +25,7 @@ from app.core.security import (
     require_roles,
 )
 from app.domain.models import AuditLog, CaseEvidence, Customer, Order, RefundCase, User
-from app.domain.status import CaseStatus
+from app.domain.status import IN_FLIGHT_STATUSES, CaseStatus, statuses_in_stage
 from app.infrastructure.idempotency import build_key, execute_idempotent, hash_request
 from app.infrastructure.lock import DistributedLock
 from app.workflow.graph import resume_workflow
@@ -98,9 +98,9 @@ def create_case(
     # 越权防护（M-1）：BUYER 身份强制申请人为 token 携带的手机号本人，
     # 不信任客户端表单传入的 applicant_id；且只能对属于自己的订单发起退款。
     # STAFF 身份（客服/主管代客建单）不受限，但订单所属校验在 order_verify 兜底。
+    order = _resolve_order(db, order_id)  # 归属校验 + 同订单防重复共用一次解析
     if principal.token_type == TOKEN_TYPE_BUYER:
         applicant_id = principal.sub
-        order = _resolve_order(db, order_id)
         if order is not None:
             customer = db.query(Customer).filter_by(phone=applicant_id).first()
             if customer is None or order.customer_id != customer.id:
@@ -108,6 +108,29 @@ def create_case(
                     status_code=403,
                     detail={"code": "ORDER_NOT_OWNED", "message": "订单不属于当前买家，禁止越权退款"},
                 )
+
+    # 资损红线（防"一个订单退两次款"）：同订单已有**进行中的售后工单**
+    # （CREATED/RUNNING/SUSPENDED/APPROVED/REFUNDING/REFUND_FAILED）时禁止再开第二单。
+    # 终态/已拒案件不阻塞（可重新发起）；伪造订单（resolve 不到）交给 order_verify 拦截。
+    if order is not None:
+        dup = (
+            db.query(RefundCase.id, RefundCase.ticket_no)
+            .filter(
+                RefundCase.order_id.in_([order.order_no, str(order.id)]),
+                RefundCase.status.in_(sorted(s.value for s in IN_FLIGHT_STATUSES)),
+            )
+            .order_by(RefundCase.id.asc())
+            .first()
+        )
+        if dup is not None:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "DUPLICATE_CASE",
+                    "message": f"订单 {order_id} 已有进行中的售后工单（{dup.ticket_no}），"
+                    f"请待其完结后再发起，避免重复退款",
+                },
+            )
 
     # 买家端显式三选一（退款/退货退款/换货）→ claim_type 落库；员工侧建单为空字符串，存 NULL
     claim = claim_type.strip() if claim_type else ""
@@ -170,12 +193,23 @@ def list_cases(
     db: Annotated[Session, Depends(get_db)],
     user: Annotated[User, Depends(get_current_user)],
     status: str | None = None,
+    stage: str | None = None,
     limit: int = 50,
     offset: int = 0,
 ):
-    """案件列表（分页 + 状态筛选）。"""
+    """案件列表（分页 + 精确状态 或 三态阶段 筛选）。
+    stage 三态（RUNNING/SUSPENDED/COMPLETED）由 statuses_in_stage 展开为多状态过滤，
+    与前端工作台三态筛选 tab 对应；status 精确筛选保留兼容（如批量审批）。"""
     q = db.query(RefundCase)
-    if status:
+    if stage:
+        statuses = statuses_in_stage(stage)
+        if statuses is None:
+            raise HTTPException(
+                status_code=422,
+                detail={"code": "INVALID_STAGE", "message": f"未知三态阶段: {stage}（可选 RUNNING/SUSPENDED/COMPLETED）"},
+            )
+        q = q.filter(RefundCase.status.in_(statuses))
+    elif status:
         q = q.filter(RefundCase.status == status)
     total = q.count()
     items = (

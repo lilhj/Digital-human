@@ -485,6 +485,7 @@ def order_verify_node(state: RefundWorkflowState) -> RefundWorkflowState:
             applicant_amount=case.applicant_amount,
             actual_amount=case.actual_amount,
             applicant_id=case.applicant_id,
+            case_id=case.id,  # 防重复申请：排除当前案件，查同订单其他进行中案件
         )
     finally:
         db.close()
@@ -494,6 +495,7 @@ def order_verify_node(state: RefundWorkflowState) -> RefundWorkflowState:
         "product_matched": result.product_matched,
         "price_matched": result.price_matched,
         "already_refunded": result.already_refunded,
+        "duplicate_case": result.duplicate_case,
         "order_verify_reason": result.reason,
         "order_verify_result": result.result,
     }
@@ -842,6 +844,40 @@ def _writeback_order_refunded(case_id: int) -> None:
         db.close()
 
 
+def _order_already_refunded_elsewhere(case_id: int) -> bool:
+    """防双退纵深（退款执行前最后一道闸）：同订单是否已被**其他案件**退款完成。
+
+    命中任一即视为已退款：
+    1. 订单状态已回写为 REFUNDED（另一案件退款成功写回）；
+    2. 同订单存在其他 COMPLETED（退款完成）的案件。
+    并发/历史数据绕过创建闸与三查闸时，靠这一道在 finalize 拦截，堵住"一个订单退两次款"。
+    """
+    db = SessionLocal()
+    try:
+        case = db.get(RefundCase, case_id)
+        if case is None:
+            return False
+        order = db.query(Order).filter_by(order_no=case.order_id).first()
+        if order is None and case.order_id.strip().isdigit():
+            order = db.get(Order, int(case.order_id))
+        if order is None:
+            return False
+        if order.status == OrderStatus.REFUNDED.value:
+            return True
+        other = (
+            db.query(RefundCase.id)
+            .filter(
+                RefundCase.id != case_id,
+                RefundCase.order_id.in_([order.order_no, str(order.id)]),
+                RefundCase.status == CaseStatus.COMPLETED.value,
+            )
+            .first()
+        )
+        return other is not None
+    finally:
+        db.close()
+
+
 # ---------- 挂起快照双写（v2.0 §11） ----------
 # PG checkpoint 是权威恢复源；Redis 仅作展示/导出/运维排查的辅助镜像。
 # 两条写都做了降级：Redis 不可用（网络抖动/容器重启）只告警，绝不阻断人工挂起主流程。
@@ -899,6 +935,18 @@ def finalize_node(state: RefundWorkflowState) -> RefundWorkflowState:
     case_id = state["case_id"]
 
     if action == DECISION_APPROVE:
+        # 资损纵深（防"一个订单退两次款"）：退款执行前最后一道闸。
+        # 同订单若已被其他案件退款完成（另一案 COMPLETED 或订单已 REFUNDED），本单拒绝。
+        # 并发创建/历史数据绕过创建闸与三查闸时靠这一道兜底。
+        if _order_already_refunded_elsewhere(case_id):
+            reason = "该订单已有退款完成记录，不可重复退款"
+            logger.warning("case %s 防双退拦截：同订单已有退款完成记录，拒绝本单", case_id)
+            ok = _db_update_status(case_id, CaseStatus.REJECTED.value, reason=reason)
+            if not ok:
+                raise RuntimeError("防双退拦截后终态落库失败：案件状态已变更")
+            publish_event(case_id, "STATUS_CHANGED", {"status": CaseStatus.REJECTED.value})
+            return {"decision": action, "duplicate_refund_blocked": True}
+
         # 工单6 防御纵深：退款工具执行前再卡一道（Critic 漏拦的边缘注入）。
         # 经主管挂起态人工复核批准 -> 放行；否则若 description 仍含越权退款指令 -> 阻断。
         from app.security.tool_filter import filter_refund_action

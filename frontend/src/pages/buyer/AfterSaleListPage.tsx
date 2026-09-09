@@ -7,8 +7,11 @@ import { getAfterSales, refreshOrders, syncAfterSales } from "../../api/mockBuye
 import { card, fen, td, th } from "../../theme";
 
 const STATUS_COLOR: Record<string, string> = {
-  待处理: "#8a6d00",
   处理中: "#0d6efd",
+  挂起待处理: "#8a6d00", // 需要人工处理，琥珀色提示关注
+  已完成: "#1a7f37",
+  // 兼容旧版本地缓存（老标签）：待处理≈处理中，已完结≈已完成
+  待处理: "#0d6efd",
   已完结: "#1a7f37",
 };
 

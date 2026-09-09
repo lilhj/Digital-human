@@ -46,6 +46,38 @@ TRANSITIONS: dict[CaseStatus, set[CaseStatus]] = {
 
 TERMINAL_STATUSES = {CaseStatus.COMPLETED, CaseStatus.FAILED}
 
+# 进行中的案件状态（资损防护：防"一个订单退两次款"）。
+# 同订单存在任一这些状态的案件时，禁止再开新单 / 再放行退款；
+# REJECTED/COMPLETED/FAILED 为终态或已结案，不阻塞重新发起。
+IN_FLIGHT_STATUSES = frozenset({
+    CaseStatus.CREATED,
+    CaseStatus.RUNNING,
+    CaseStatus.SUSPENDED,
+    CaseStatus.APPROVED,
+    CaseStatus.REFUNDING,
+    CaseStatus.REFUND_FAILED,
+})
+
+# 决策流三态（宏观）→ 案件八态（微观）映射：与前端 src/api/caseStage.ts 口径一致。
+# 运行中：流水线在跑（含退款重试中）；挂起中：等人工审批；已完成：终态（含已拒单/流程终止）。
+STAGE_STATUSES: dict[str, set[CaseStatus]] = {
+    "RUNNING": {
+        CaseStatus.CREATED,
+        CaseStatus.RUNNING,
+        CaseStatus.APPROVED,
+        CaseStatus.REFUNDING,
+        CaseStatus.REFUND_FAILED,
+    },
+    "SUSPENDED": {CaseStatus.SUSPENDED},
+    "COMPLETED": {CaseStatus.COMPLETED, CaseStatus.REJECTED, CaseStatus.FAILED},
+}
+
+
+def statuses_in_stage(stage: str) -> set[str] | None:
+    """三态阶段 → 命中的案件状态集合；未知三态返回 None（调用方应报 422）。"""
+    statuses = STAGE_STATUSES.get(stage)
+    return {s.value for s in statuses} if statuses else None
+
 
 class IllegalStateTransitionError(ValueError):
     """非法状态转换：调用方应捕获并记录审计，不静默覆盖。"""

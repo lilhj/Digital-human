@@ -15,7 +15,8 @@ from dataclasses import dataclass
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
-from app.domain.models import Customer, Order, OrderItem, OrderStatus
+from app.domain.models import Customer, Order, OrderItem, OrderStatus, RefundCase
+from app.domain.status import IN_FLIGHT_STATUSES
 
 
 # 已售后订单状态（任一命中即视为不可重复退款）
@@ -38,6 +39,8 @@ class OrderVerifyResult:
     reason: str
     # PASS -> 走正常链路；REJECT -> 直接拒绝（伪造/重复）；REVIEW -> 转人工（不一致）
     result: str
+    # 同订单已有进行中的其他案件（防"一个订单退两次款"，资损红线）
+    duplicate_case: bool = False
 
 
 class OrderVerifyProvider:
@@ -45,7 +48,7 @@ class OrderVerifyProvider:
 
     def verify(
         self, *, order_id: str, applicant_amount: int, actual_amount: int,
-        applicant_id: str | None = None,
+        applicant_id: str | None = None, case_id: int | None = None,
     ) -> OrderVerifyResult:
         raise NotImplementedError
 
@@ -55,7 +58,7 @@ class FakeOrderVerifyProvider(OrderVerifyProvider):
 
     def verify(
         self, *, order_id: str, applicant_amount: int, actual_amount: int,
-        applicant_id: str | None = None,
+        applicant_id: str | None = None, case_id: int | None = None,
     ) -> OrderVerifyResult:
         return OrderVerifyResult(
             order_exists=True,
@@ -72,7 +75,7 @@ class DbOrderVerifyProvider(OrderVerifyProvider):
 
     def verify(
         self, *, order_id: str, applicant_amount: int, actual_amount: int,
-        applicant_id: str | None = None,
+        applicant_id: str | None = None, case_id: int | None = None,
     ) -> OrderVerifyResult:
         db: Session = SessionLocal()
         try:
@@ -131,6 +134,30 @@ class DbOrderVerifyProvider(OrderVerifyProvider):
                 and actual_amount == order.total_cents
                 and sum_subtotal == order.total_cents
             )
+
+            # 防重复申请（资损红线，优先级最高）：同订单已有**进行中的其他案件**
+            # （CREATED/RUNNING/SUSPENDED/APPROVED/REFUNDING/REFUND_FAILED）时直接 REJECT，
+            # 排除当前案件本身（本案件在 order_verify 运行时已入库）；终态/已拒不拦（可重新发起）。
+            dup = (
+                db.query(RefundCase.id)
+                .filter(
+                    RefundCase.id != (case_id or -1),
+                    RefundCase.order_id.in_([order.order_no, str(order.id)]),
+                    RefundCase.status.in_(sorted(s.value for s in IN_FLIGHT_STATUSES)),
+                )
+                .order_by(RefundCase.id.asc())
+                .first()
+            )
+            if dup is not None:
+                return OrderVerifyResult(
+                    order_exists=True,
+                    product_matched=product_ok,
+                    price_matched=price_ok,
+                    already_refunded=False,
+                    duplicate_case=True,
+                    reason="订单已有进行中的售后工单，禁止重复申请退款",
+                    result="REJECT",
+                )
 
             if not product_ok:
                 return OrderVerifyResult(

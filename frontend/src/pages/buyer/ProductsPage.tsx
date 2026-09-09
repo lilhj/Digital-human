@@ -67,7 +67,7 @@ export default function ProductsPage() {
           <Link key={p.id} to={`/buyer/product/${p.id}`} style={{ textDecoration: "none", color: "inherit" }}>
             <div style={{ ...card, padding: 0, overflow: "hidden", height: "100%" }}>
               <div style={{ height: 150, background: "#fff", display: "flex", alignItems: "center", justifyContent: "center", borderBottom: "1px solid #f0f0f0" }}>
-                <img src={p.image} alt={p.name} loading="lazy" style={{ maxWidth: "85%", maxHeight: "85%", objectFit: "contain" }} />
+                <img src={p.image} alt={p.name} loading="lazy" style={{ width: "100%", height: "100%", objectFit: "contain" }} />
               </div>
               <div style={{ padding: 12 }}>
                 <div style={{ fontSize: 14, fontWeight: 600, minHeight: 38 }}>{p.name}</div>

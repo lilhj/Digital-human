@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import auth, cases, dashboard, events, intent, review_tasks, security, telemetry
+from app.api import admin_users, auth, cases, dashboard, events, intent, review_tasks, security, telemetry
 from app.api import cart, customer_auth, orders, products
 from app.batch import api as batch_api
 from app.core.config import get_settings
@@ -56,6 +56,7 @@ def health() -> dict:
 
 
 app.include_router(auth.router)
+app.include_router(admin_users.router)
 app.include_router(cases.router)
 app.include_router(intent.router)
 app.include_router(security.router)

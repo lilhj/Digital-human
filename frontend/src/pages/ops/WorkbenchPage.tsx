@@ -1,15 +1,24 @@
 /** 决策工作台：概览大屏 + 案件列表（状态筛选）+ 外部渠道代录（SSE 实时刷新）。 */
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api } from "../../api/client";
+import { api, getRole } from "../../api/client";
 import type { CaseListResponse, CaseSummary, Overview } from "../../api/types";
 import CreateCaseForm from "../../components/CreateCaseForm";
 import StatusBadge from "../../components/StatusBadge";
+import { caseStage } from "../../api/caseStage";
 import { card, td, th } from "../../theme";
 
-const STATUS_FILTERS = ["", "SUSPENDED", "RUNNING", "COMPLETED", "REJECTED", "FAILED"];
+// 决策流三态筛选（与后端 /cases?stage= 及详情页 StageStepper 同口径）
+const STAGE_FILTERS: [string, string][] = [
+  ["", "全部"],
+  ["RUNNING", "运行中"],
+  ["SUSPENDED", "挂起中"],
+  ["COMPLETED", "已完成"],
+];
 
 export default function WorkbenchPage() {
+  // 外部渠道代录只面向客服（接电话/邮件代录），主管聚焦审批，不显示代录入口
+  const isManager = getRole() === "MANAGER";
   const [overview, setOverview] = useState<Overview | null>(null);
   const [cases, setCases] = useState<CaseSummary[]>([]);
   const [filter, setFilter] = useState("");
@@ -17,7 +26,7 @@ export default function WorkbenchPage() {
   const [apiDown, setApiDown] = useState(false);
 
   async function load() {
-    const query = filter ? `?status=${filter}` : "";
+    const query = filter ? `?stage=${filter}` : "";
     const [ov, list] = await Promise.all([
       api.get<Overview>("/dashboard/overview"),
       api.get<CaseListResponse>(`/cases${query}`),
@@ -38,6 +47,15 @@ export default function WorkbenchPage() {
     return () => es.close();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
+
+  // 三态计数：由后端 status_counts（按精确状态）按 caseStage 聚合成三态，与筛选 tab 同口径
+  const stageCounts: Record<string, number> = {};
+  if (overview?.status_counts) {
+    for (const [status, n] of Object.entries(overview.status_counts)) {
+      const stage = caseStage(status);
+      stageCounts[stage] = (stageCounts[stage] ?? 0) + n;
+    }
+  }
 
   return (
     <div style={{ maxWidth: 1100, margin: "0 auto", padding: 24 }}>
@@ -65,27 +83,31 @@ export default function WorkbenchPage() {
         ))}
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "380px 1fr", gap: 16 }}>
-        <CreateCaseForm onCreated={() => load().catch(() => {})} />
+      <div style={{ display: "grid", gridTemplateColumns: isManager ? "1fr" : "380px 1fr", gap: 16 }}>
+        {!isManager && <CreateCaseForm onCreated={() => load().catch(() => {})} />}
 
         <div>
           <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-            {STATUS_FILTERS.map((s) => (
-              <button
-                key={s}
-                onClick={() => setFilter(s)}
-                style={{
-                  padding: "5px 12px",
-                  borderRadius: 14,
-                  border: filter === s ? "2px solid #0d6efd" : "1px solid #ccc",
-                  background: filter === s ? "#e7f1ff" : "#fff",
-                  cursor: "pointer",
-                  fontSize: 13,
-                }}
-              >
-                {s === "" ? "全部" : s}
-              </button>
-            ))}
+            {STAGE_FILTERS.map(([value, label]) => {
+              const count = value === "" ? overview?.total ?? 0 : stageCounts[value] ?? 0;
+              return (
+                <button
+                  key={value}
+                  onClick={() => setFilter(value)}
+                  style={{
+                    padding: "5px 12px",
+                    borderRadius: 14,
+                    border: filter === value ? "2px solid #0d6efd" : "1px solid #ccc",
+                    background: filter === value ? "#e7f1ff" : "#fff",
+                    cursor: "pointer",
+                    fontSize: 13,
+                  }}
+                >
+                  {label}
+                  <span style={{ marginLeft: 4, fontSize: 12, opacity: 0.75 }}>({count})</span>
+                </button>
+              );
+            })}
           </div>
 
           {loading ? (

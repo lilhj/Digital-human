@@ -114,6 +114,62 @@ class BuyerAuthResponse(BaseModel):
     nickname: str | None = None
 
 
+# ---------- ADMIN 用户管理（phase12） ----------
+
+
+class AdminUserOut(BaseModel):
+    """员工信息。绝不返回 password_hash。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    username: str
+    role: str  # CSR / MANAGER / ADMIN
+    display_name: str
+    is_active: bool
+    created_at: datetime
+
+
+class AdminCustomerOut(BaseModel):
+    """买家信息。绝不返回 password_hash。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    phone: str
+    nickname: str | None = None
+    is_active: bool
+    created_at: datetime
+
+
+class CreateUserRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    username: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9_.-]+$")
+    password: str = Field(min_length=6, max_length=128)
+    role: str = Field(pattern="^(CSR|MANAGER|ADMIN)$")
+    display_name: str = Field(min_length=1, max_length=64)
+
+
+class UpdateUserRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    role: str | None = Field(default=None, pattern="^(CSR|MANAGER|ADMIN)$")
+    display_name: str | None = Field(default=None, min_length=1, max_length=64)
+    is_active: bool | None = None
+
+
+class ResetPasswordRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    new_password: str = Field(min_length=6, max_length=128)
+
+
+class AdminActionResponse(BaseModel):
+    ok: bool = True
+    message: str
+
+
 class CartAddRequest(BaseModel):
     product_id: int = Field(description="小米商品 ID")
     quantity: int = Field(ge=1, le=99, default=1)

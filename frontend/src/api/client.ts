@@ -1,5 +1,5 @@
 /** API 客户端：员工侧 JWT 鉴权 + 统一错误处理 + 幂等键生成；买家侧会话（mock，后端落地后换真 token）。 */
-import type { EvalReport, IntentSummary, LangfuseTracesResponse, PeriodicReport, RagReport, RedBlueReport, SecuritySummary, TelemetrySummary } from "./types";
+import type { AdminActionResp, AdminCustomer, AdminUser, EvalReport, IntentSummary, LangfuseTracesResponse, PeriodicReport, RagReport, RedBlueReport, SecuritySummary, TelemetrySummary } from "./types";
 
 const TOKEN_KEY = "refund_token";
 const ROLE_KEY = "refund_role";
@@ -70,6 +70,8 @@ export const api = {
   get: <T>(path: string) => request<T>(path),
   post: <T>(path: string, body: unknown, withIdem = true) =>
     request<T>(path, { method: "POST", body: JSON.stringify(body) }, withIdem),
+  patch: <T>(path: string, body: unknown) =>
+    request<T>(path, { method: "PATCH", body: JSON.stringify(body) }, false),
 };
 
 /** 工单8 意图监控大屏聚合数据。 */
@@ -125,6 +127,39 @@ export function runRedBlueReport(): Promise<RedBlueReport> {
 /** 系统监控聚合（Langfuse 管道 / 节点时延 / DLQ / Token 优化红线）。 */
 export function getTelemetrySummary(): Promise<TelemetrySummary> {
   return api.get<TelemetrySummary>("/telemetry/summary");
+}
+
+/* ---------- ADMIN 用户管理（phase12） ---------- */
+
+export function getAdminUsers(): Promise<AdminUser[]> {
+  return api.get<AdminUser[]>("/admin/users");
+}
+
+export function createAdminUser(body: { username: string; password: string; role: string; display_name: string }): Promise<AdminUser> {
+  return api.post<AdminUser>("/admin/users", body, false);
+}
+
+export function updateAdminUser(
+  id: number,
+  body: { role?: string; display_name?: string; is_active?: boolean },
+): Promise<AdminActionResp> {
+  return api.patch<AdminActionResp>(`/admin/users/${id}`, body);
+}
+
+export function resetUserPassword(id: number, new_password: string): Promise<AdminActionResp> {
+  return api.post<AdminActionResp>(`/admin/users/${id}/reset-password`, { new_password }, false);
+}
+
+export function getAdminCustomers(): Promise<AdminCustomer[]> {
+  return api.get<AdminCustomer[]>("/admin/customers");
+}
+
+export function resetCustomerPassword(id: number, new_password: string): Promise<AdminActionResp> {
+  return api.post<AdminActionResp>(`/admin/customers/${id}/reset-password`, { new_password }, false);
+}
+
+export function toggleCustomerActive(id: number): Promise<AdminActionResp> {
+  return api.post<AdminActionResp>(`/admin/customers/${id}/toggle-active`, {}, false);
 }
 
 /** Langfuse 云端真实 Trace 直读（public API 代理；未配置/不可达时 ok:false + error）。 */

@@ -10,6 +10,7 @@
  */
 import rawProducts from "./products.json";
 import { clearBuyer } from "./client";
+import { caseStage, CASE_STAGE_LABEL } from "./caseStage";
 
 export interface Product {
   id: string;
@@ -58,7 +59,7 @@ export interface AfterSale {
   amount: number;
   reason: string;
   evidence: string | null;
-  status: "待处理" | "处理中" | "已完结";
+  status: "处理中" | "挂起待处理" | "已完成";
   /** 处理结果：后端真实判定（decision/review_reason）映射，如「退款成功」「已拒绝：…」 */
   result?: string | null;
   ticket_no: string | null;
@@ -345,47 +346,38 @@ function inferAfterSaleType(desc: string): AfterSale["type"] {
   return "退款";
 }
 
-/** 案件八态 + 人工判定(decision/review_reason) -> 前端「待处理/处理中/已完结 + 处理结果」。
- *  KEY：REJECTED 案件最终会流转到 COMPLETED（关闭工单），所以"有没有被拒"只能看 decision。
+/** 案件八态 + 人工判定(decision/review_reason) -> 前端「处理中/挂起待处理/已完成 + 处理结果」。
+ *  三态映射与员工端 StageStepper 共用同一套 caseStage（运行中 → 挂起中 → 已完成），
+ *  处理结果保留后端细节：REJECTED 案件最终会流转到 COMPLETED（关闭工单），所以"有没有被拒"只能看 decision。
  *  售后类型：优先用后端 claim_type（用户显式选择），旧案件无则按 description 前缀兜底。 */
 function mapCaseToAfterSale(c: MyCaseResp): AfterSale {
   const type = (c.claim_type as AfterSale["type"]) || inferAfterSaleType(c.description);
   // 新案件 description 是纯文本原因（无「类型：」前缀），直接取全文；
   // 旧案件（无 claim_type）才按前缀「退款：原因」剥掉类型部分。
   const reason = c.claim_type ? c.description || "" : c.description.split("：")[1]?.trim() || c.description || "";
-  let status: AfterSale["status"];
+  const stage = caseStage(c.status);
+  const status = CASE_STAGE_LABEL[stage] as AfterSale["status"];
   let result: string;
-  switch (c.status) {
+  switch (stage) {
     case "COMPLETED":
-    case "REJECTED":
-      status = "已完结";
-      result =
-        c.decision === "REJECT"
+      result = c.status === "FAILED"
+        ? "退款失败：请重新发起或联系客服"
+        : c.decision === "REJECT"
           ? `已拒绝${c.review_reason ? `：${c.review_reason}` : ""}`
           : type === "换货"
             ? "换货流程已完成"
             : "退款成功";
       break;
-    case "REFUND_FAILED":
-      status = "已完结";
-      result = "退款失败：系统已自动重试，可联系客服";
-      break;
-    case "FAILED":
-      status = "已完结";
-      result = "退款失败：请重新发起或联系客服";
-      break;
     case "SUSPENDED":
-      status = "处理中";
-      result = "人工复核中";
+      result = "人工复核中，等待主管审批";
       break;
-    case "APPROVED":
-    case "REFUNDING":
-      status = "处理中";
-      result = "退款处理中";
-      break;
-    default: // CREATED / RUNNING
-      status = "待处理";
-      result = "系统审核中";
+    default: // RUNNING：CREATED/RUNNING 审核中；APPROVED/REFUNDING 退款中；REFUND_FAILED 自动重试
+      result =
+        c.status === "REFUND_FAILED"
+          ? "退款异常，系统自动重试中"
+          : c.status === "APPROVED" || c.status === "REFUNDING"
+            ? "退款处理中"
+            : "系统审核中";
   }
   return {
     id: `C${c.id}`,
@@ -476,7 +468,7 @@ export async function createAfterSale(
     amount,
     reason,
     evidence,
-    status: "待处理",
+    status: "处理中",
     result: "系统审核中",
     ticket_no: r.ticket_no,
     created_at: new Date().toISOString(),

@@ -87,8 +87,13 @@ export default function AfterSaleApplyPage() {
       return;
     }
     const finalAmount = type === "换货" ? 0 : Math.round(parseFloat(amount) * 100);
-    await createAfterSale(buyer!.phone, order!.id, type, finalAmount, reason, evidence, evidenceFile);
-    navigate("/buyer/aftersale?created=1");
+    try {
+      await createAfterSale(buyer!.phone, order!.id, type, finalAmount, reason, evidence, evidenceFile);
+      navigate("/buyer/aftersale?created=1");
+    } catch (e) {
+      // 后端 4xx 统一抛出（如 409 DUPLICATE_CASE 重复申请、403 越权、422 金额超限），如实展示给买家
+      setError(e instanceof Error ? e.message : "提交失败，请稍后重试");
+    }
   }
 
   return (

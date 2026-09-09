@@ -41,7 +41,7 @@ export default function CartPage() {
           {items.map((i) => (
             <div key={i.product_id} style={{ ...card, display: "flex", alignItems: "center", gap: 16, marginBottom: 10 }}>
               <div style={{ width: 64, height: 64, background: "#fff", border: "1px solid #f0f0f0", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                <img src={i.product.image} alt={i.product.name} style={{ maxWidth: "85%", maxHeight: "85%", objectFit: "contain" }} />
+                <img src={i.product.image} alt={i.product.name} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
               </div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 14, fontWeight: 600 }}>{i.product.name}</div>

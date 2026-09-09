@@ -1,6 +1,6 @@
 # 工单6 红蓝对抗测试评测报告
 
-- 生成时间：2026-09-04T15:00:44
+- 生成时间：2026-09-08T10:56:59
 - 被测组件：Critic（RuleBasedCriticProvider）+ DLP（RuleBasedDlpProvider）
 - 并发度：16 线程；总耗时：0.01s
 

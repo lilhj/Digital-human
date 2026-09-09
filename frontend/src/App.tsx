@@ -12,6 +12,7 @@ import CaseDetailPage from "./pages/ops/CaseDetailPage";
 import BatchApprovePage from "./pages/ops/BatchApprovePage";
 import EvalPage from "./pages/ops/EvalPage";
 import SecurityPage from "./pages/ops/SecurityPage";
+import AdminUsersPage from "./pages/ops/AdminUsersPage";
 import IntentPage from "./pages/ops/IntentPage";
 import TelemetryPage from "./pages/ops/TelemetryPage";
 import BuyerLoginPage from "./pages/buyer/BuyerLoginPage";
@@ -47,6 +48,7 @@ export default function App() {
           <Route path="batch" element={<BatchApprovePage />} />
           <Route path="eval" element={<EvalPage />} />
           <Route path="security" element={<SecurityPage />} />
+          <Route path="admin" element={<AdminUsersPage />} />
           <Route path="intent" element={<IntentPage />} />
           <Route path="telemetry" element={<TelemetryPage />} />
           <Route path="cases/:id" element={<CaseDetailPage />} />

@@ -239,6 +239,7 @@ class Customer(Base):
     phone: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     nickname: Mapped[str | None] = mapped_column(String(64))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)  # 管理员停用后禁止登录
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
 

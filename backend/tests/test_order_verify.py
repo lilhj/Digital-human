@@ -232,3 +232,66 @@ class TestOrderVerify:
         result = run_workflow(case_id, f"tr-{uuid.uuid4().hex}")
         assert result["decision"] == "REJECT"
         assert "越权" in result.get("review_reason", "")
+
+    def test_duplicate_inflight_case_rejected(self):
+        """资损红线：同订单已有进行中案件（挂起待审批）再申请 -> REJECT（防"一个订单退两次款"）。"""
+        db = SessionLocal()
+        try:
+            cust = _make_customer(f"1{MARKER[-9:]}", db)
+            db.commit()
+            _make_order(db, order_no=f"OV-{MARKER}-D", total_cents=12_800,
+                        items=[{"product_id": "P1", "product_name": "商品",
+                                "price_cents": 12_800, "quantity": 1, "subtotal_cents": 12_800}])
+        finally:
+            db.close()
+        # 第一个案件：进行中（挂起待审批）
+        case_a = _make_case(f"OV-{MARKER}-D", 12_800, MARKER)
+        db = SessionLocal()
+        try:
+            db.query(RefundCase).filter_by(id=case_a).update(
+                {"status": CaseStatus.SUSPENDED.value})
+            db.commit()
+        finally:
+            db.close()
+        # 第二个案件：同订单再申请 -> 三查硬闸拦截
+        case_b = _make_case(f"OV-{MARKER}-D", 12_800, MARKER)
+        result = run_workflow(case_b, f"tr-{uuid.uuid4().hex}")
+        assert result["decision"] == "REJECT"
+        assert "重复申请" in result.get("review_reason", "")
+        assert _status(case_b) == CaseStatus.REJECTED.value
+
+    def test_finalize_blocks_double_refund(self):
+        """退款执行前防双退：同订单已有 COMPLETED 案件 -> 第二个案件 finalize 被拦截 REJECT。"""
+        from app.workflow.nodes import finalize_node
+        db = SessionLocal()
+        try:
+            cust = _make_customer(f"1{MARKER[-9:]}", db)
+            db.commit()
+            _make_order(db, order_no=f"OV-{MARKER}-G", total_cents=12_800,
+                        items=[{"product_id": "P1", "product_name": "商品",
+                                "price_cents": 12_800, "quantity": 1, "subtotal_cents": 12_800}])
+        finally:
+            db.close()
+        # 案件 A 走完全流程：退款完成，订单回写 REFUNDED
+        case_a = _make_case(f"OV-{MARKER}-G", 12_800, MARKER, with_evidence=True)
+        result_a = run_workflow(case_a, f"tr-{uuid.uuid4().hex}")
+        assert result_a["decision"] == "APPROVE"
+        assert _order_status(f"OV-{MARKER}-G") == OrderStatus.REFUNDED.value
+        # 案件 B：模拟已绕过创建闸/三查闸（并发或历史单），直接置 APPROVED 走到退款执行前
+        case_b = _make_case(f"OV-{MARKER}-G", 12_800, MARKER, with_evidence=True)
+        db = SessionLocal()
+        try:
+            db.query(RefundCase).filter_by(id=case_b).update(
+                {"status": CaseStatus.APPROVED.value})
+            db.commit()
+        finally:
+            db.close()
+        out = finalize_node({
+            "case_id": case_b,
+            "decision": "APPROVE",
+            "human_action": None,
+            "amount_cent": 12_800,
+            "description": "商品破损，申请退款",
+        })
+        assert out.get("duplicate_refund_blocked") is True
+        assert _status(case_b) == CaseStatus.REJECTED.value

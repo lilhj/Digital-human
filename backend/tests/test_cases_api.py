@@ -181,3 +181,89 @@ class TestReviewTasks:
         r = client.get("/api/v1/review-tasks", headers=auth_header("MANAGER"))
         assert r.status_code == 200
         assert isinstance(r.json(), list)
+
+
+class TestStageFilter:
+    """决策流三态筛选：stage=RUNNING/SUSPENDED/COMPLETED 展开为多状态过滤（工作台三态 tab）。"""
+
+    def _set_status(self, case_id: int, status: str) -> None:
+        db = SessionLocal()
+        try:
+            db.query(RefundCase).filter_by(id=case_id).update({"status": status})
+            db.commit()
+        finally:
+            db.close()
+
+    def test_stage_filter_groups(self):
+        running = create_case(description="运行中样本")  # 保持 CREATED → RUNNING 三态
+        suspended = create_case(description="挂起样本")
+        done = create_case(description="完成样本")
+        rejected = create_case(description="拒绝样本")
+        self._set_status(suspended["case_id"], "SUSPENDED")
+        self._set_status(done["case_id"], "COMPLETED")
+        self._set_status(rejected["case_id"], "REJECTED")
+
+        def ids(stage: str) -> set[int]:
+            r = client.get(f"/api/v1/cases?stage={stage}", headers=auth_header("MANAGER"))
+            assert r.status_code == 200
+            return {c["id"] for c in r.json()["items"]}
+
+        # RUNNING：CREATED/RUNNING/APPROVED/REFUNDING/REFUND_FAILED
+        running_ids = ids("RUNNING")
+        assert running["case_id"] in running_ids
+        assert suspended["case_id"] not in running_ids
+        assert done["case_id"] not in running_ids
+
+        # SUSPENDED：仅挂起
+        assert suspended["case_id"] in ids("SUSPENDED")
+
+        # COMPLETED：COMPLETED/REJECTED/FAILED
+        completed_ids = ids("COMPLETED")
+        assert done["case_id"] in completed_ids
+        assert rejected["case_id"] in completed_ids
+        assert running["case_id"] not in completed_ids
+
+    def test_stage_unknown_422(self):
+        r = client.get("/api/v1/cases?stage=MAYBE", headers=auth_header("MANAGER"))
+        assert r.status_code == 422
+        assert r.json()["code"] == "INVALID_STAGE"
+
+
+class TestDuplicateCase:
+    """资损红线：同订单已有进行中案件时，禁止再开第二单（防"一个订单退两次款"）。"""
+
+    def test_duplicate_inflight_rejected(self):
+        import uuid
+
+        from app.domain.models import Order
+
+        order_no = f"ORD-{uuid.uuid4().hex[:8]}"
+        db = SessionLocal()
+        try:
+            db.add(Order(order_no=order_no, customer_id=1, total_cents=12_800, status="PAID"))
+            db.commit()
+        finally:
+            db.close()
+        # 第一单：CREATED（进行中）
+        create_case(order_id=order_no)
+        # 第二单：同订单 -> 409 拒绝创建
+        r = client.post(
+            "/api/v1/cases",
+            data={
+                "applicant_id": "user-1",
+                "order_id": order_no,
+                "applicant_amount": 12_800,
+                "actual_amount": 12_800,
+                "description": "再退一次",
+            },
+            headers=auth_header("CSR"),
+        )
+        assert r.status_code == 409, r.text
+        assert r.json()["code"] == "DUPLICATE_CASE"
+        # 清理测试订单
+        db = SessionLocal()
+        try:
+            db.query(Order).filter_by(order_no=order_no).delete(synchronize_session=False)
+            db.commit()
+        finally:
+            db.close()

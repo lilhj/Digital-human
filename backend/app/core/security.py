@@ -127,6 +127,8 @@ def get_current_customer(
     customer = db.query(Customer).filter_by(phone=payload["sub"]).first()
     if customer is None:
         raise HTTPException(status_code=401, detail={"code": "USER_NOT_FOUND", "message": "买家不存在"})
+    if not customer.is_active:
+        raise HTTPException(status_code=403, detail={"code": "ACCOUNT_DISABLED", "message": "账号已被停用"})
     return customer
 
 

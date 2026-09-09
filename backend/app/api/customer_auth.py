@@ -40,6 +40,10 @@ def login(body: BuyerLoginRequest, db: Annotated[Session, Depends(get_db)]):
         raise HTTPException(
             status_code=401, detail={"code": "BAD_CREDENTIALS", "message": "手机号或密码错误"}
         )
+    if not customer.is_active:
+        raise HTTPException(
+            status_code=403, detail={"code": "ACCOUNT_DISABLED", "message": "账号已被停用，请联系客服"}
+        )
     return BuyerAuthResponse(
         access_token=create_buyer_token(customer),
         phone=customer.phone,

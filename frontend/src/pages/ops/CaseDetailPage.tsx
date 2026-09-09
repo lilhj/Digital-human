@@ -9,6 +9,7 @@ import { api } from "../../api/client";
 import type { AgentNode, CaseDetail, CaseGraph } from "../../api/types";
 import ReviewPanel from "../../components/ReviewPanel";
 import StatusBadge from "../../components/StatusBadge";
+import StageStepper from "../../components/StageStepper";
 import { card } from "../../theme";
 
 /* ---------- 买家标识脱敏（DLP 体现：全程打码显示） ---------- */
@@ -198,6 +199,12 @@ export default function CaseDetailPage() {
       <h1 style={{ fontSize: 20, margin: "8px 0 16px" }}>
         {detail.ticket_no} <StatusBadge status={detail.status} />
       </h1>
+
+      {/* 三态流转 Stepper（宏观生命周期，与下方 AgentFlow 微观节点时间线互补） */}
+      <section style={{ ...card, marginBottom: 16 }}>
+        <h2 style={{ fontSize: 14, margin: "0 0 10px", color: "#555" }}>🔀 决策流三态流转</h2>
+        <StageStepper status={detail.status} nodes={nodes} />
+      </section>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, alignItems: "start" }}>
         {/* 左栏 */}

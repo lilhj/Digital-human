@@ -45,7 +45,7 @@ export default function ProductDetailPage() {
       <Link to="/buyer" style={{ fontSize: 13, color: "#0d6efd" }}>← 返回商品列表</Link>
       <div style={{ ...card, display: "grid", gridTemplateColumns: "320px 1fr", gap: 24, marginTop: 12 }}>
         <div style={{ height: 320, background: "#fff", border: "1px solid #f0f0f0", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <img src={product.image} alt={product.name} style={{ maxWidth: "85%", maxHeight: "85%", objectFit: "contain" }} />
+          <img src={product.image} alt={product.name} style={{ width: "100%", height: "100%", objectFit: "contain" }} />
         </div>
         <div>
           <h1 style={{ fontSize: 22, margin: "4px 0" }}>{product.name}</h1>

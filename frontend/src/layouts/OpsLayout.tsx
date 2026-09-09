@@ -8,6 +8,7 @@ const NAV = [
   { to: "/batch", label: "批量审批", icon: "📦", managerOnly: true },
   { to: "/eval", label: "评测中心", icon: "🧪" },
   { to: "/security", label: "安全中心", icon: "🔒" },
+  { to: "/admin", label: "用户管理", icon: "👥", adminOnly: true },
   { to: "/intent", label: "意图监控", icon: "🎯" },
   { to: "/telemetry", label: "系统监控", icon: "📈" },
 ];
@@ -37,7 +38,11 @@ export default function OpsLayout() {
           <div style={{ fontSize: 11, color: "#7d8aa5", marginTop: 4 }}>多Agent 协同 · 运营侧</div>
         </div>
         <nav style={{ flex: 1, padding: "10px 8px" }}>
-          {NAV.filter((n) => !n.managerOnly || role === "MANAGER" || role === "ADMIN").map((n) => (
+          {NAV.filter((n) => {
+            if (n.managerOnly) return role === "MANAGER" || role === "ADMIN";
+            if (n.adminOnly) return role === "ADMIN";
+            return true;
+          }).map((n) => (
             <NavLink
               key={n.to}
               to={n.to}

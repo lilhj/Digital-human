@@ -16,3 +16,4 @@ python-multipart>=0.0.9
 pillow>=10.4
 openpyxl>=3.1    # 批量审批导出/上传解析（运行时延迟 import，缺失会 500）
 e2b-code-interpreter>=1.0    # SANDBOX_MODE=on 时连本地 CubeSandbox（地址/密钥由 .env 注入进程）
+websockets>=14               # 数字人直播：驱动长连接（uvicorn[standard] 已含，显式声明以固定下限）

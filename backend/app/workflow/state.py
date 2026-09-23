@@ -16,7 +16,14 @@ class RefundWorkflowState(TypedDict, total=False):
     # Evidence 输出
     evidence_text: str
     ocr_confidence: float
-    evidence_status: str  # OK / TIMEOUT / LOW_CONFIDENCE / EMPTY
+    evidence_status: str  # OK / TIMEOUT / LOW_CONFIDENCE / NO_TEXT / EMPTY
+    vision_description: str  # VL 图片语义理解（凭证一致性校验输入）
+    vision_security_blocked: bool  # VL 描述命中 Critic BLOCK（图内注入）→ 转人工
+    # VL 结构化字段透传（凭证一致性规则层判定输入，不只用 description 文本）
+    vision_is_damaged: bool | None  # 图片是否有损伤
+    vision_severity: str            # 轻微 / 中等 / 严重 / 报废级
+    vision_category: str            # 产品品类（如 智能手机）
+    vision_damage_type: str         # 损伤类型（如 屏幕碎裂）
 
     # 风险输出
     fraud_score: float
@@ -24,6 +31,14 @@ class RefundWorkflowState(TypedDict, total=False):
     sentiment_score: float
     risk_level: str
     risk_reason: str  # LLM 打分理由（工单5 锚定优化：风险等级与分数强一致 + 可追溯）
+    evidence_consistent: str  # consistent / uncertain / inconsistent（LLM 兜底信号，不参与评分）
+    evidence_penalty: float  # 恒 0（一致性惩罚已拆为独立信号，不污染 fraud_score）
+
+    # 凭证一致性独立信号（规则优先，LLM 兜底；从 fraud_score 拆出，决策独立响应 + 前端独立展示）
+    consistency_level: str          # MATCH / PARTIAL / MISMATCH / UNCERTAIN
+    consistency_dimensions: list[str]  # 不符维度（可解释，如 "破损声明矛盾"）
+    consistency_reason: str
+    consistency_penalty: float      # 展示用惩罚分（0 / 0.15 / 0.30），不进 fraud_score
 
     # 订单三查（v2.0 §7/§8，order_verify 节点输出）
     order_exists: bool

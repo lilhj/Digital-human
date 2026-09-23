@@ -40,6 +40,8 @@ class CaseEvidenceOut(BaseModel):
     ocr_text: str | None = None
     ocr_confidence: float | None = None
     parse_status: str | None = None
+    # 工单6 扩展：Qwen2.5-VL 图片语义理解（DLP 脱敏后展示）
+    vision_text: str | None = None
 
 
 class ReviewTaskOut(BaseModel):
@@ -68,6 +70,11 @@ class CaseDetailOut(BaseModel):
     risk_score: float | None = None
     decision: str | None = None
     review_reason: str | None = None
+    # 凭证一致性独立信号（从 fraud_score 拆出；详情页独立面板展示，可解释可审计）
+    consistency_level: str | None = None       # MATCH / PARTIAL / MISMATCH / UNCERTAIN
+    consistency_dimensions: list[str] = []    # 不符维度
+    consistency_reason: str | None = None
+    consistency_penalty: float | None = None  # 展示用惩罚分（0/0.15/0.30），不进风控分
     # 工单8 双层意图识别结果（前端大屏/案件详情展示；旧案件为 None）
     intent: str | None = None
     intent_source: str | None = None

@@ -38,6 +38,13 @@ const SOURCE_LABEL: Record<string, string> = {
   fallback: "兜底降级",
   fake: "测试",
 };
+/* 凭证一致性独立信号（从 fraud_score 拆出，规则优先 LLM 兜底）展示映射 */
+const CONSISTENCY_META: Record<string, { label: string; color: string }> = {
+  MATCH: { label: "✓ 一致（描述与凭证相符）", color: "#28a745" },
+  PARTIAL: { label: "⚠ 部分相符（存在出入）", color: "#fd7e14" },
+  MISMATCH: { label: "✗ 不符（描述与凭证矛盾）", color: "#dc3545" },
+  UNCERTAIN: { label: "? 信息不足", color: "#868e96" },
+};
 
 /* ---------- 节点时间线定义（§6.3 链路顺序 + 能力来源标注） ---------- */
 interface Slot {
@@ -250,12 +257,34 @@ export default function CaseDetailPage() {
                 </p>
               </>
             ) : evidence?.image_url ? (
-              /* 有图但 OCR 没认出文字：如实提示人工看原图，不再误显示成"无凭证" */
-              <p style={{ fontSize: 13, color: "#b02a37" }}>
-                已上传凭证，但 OCR 未识别出文字（状态 {evidence.parse_status ?? "LOW_CONFIDENCE"}）——系统已转人工复核，请以上方原图为准。
+              /* 有图但 OCR 没认出文字（NO_TEXT）：OCR 无字不阻断流程，语义判断交给 VL，
+                 只展示"未识别到文字"，不再误显示成"无凭证"/"已转人工" */
+              <p style={{ fontSize: 13, color: "#888" }}>
+                已上传凭证，OCR 未识别到文字（{evidence.parse_status ?? "NO_TEXT"}）——语义判断以下方图片语义理解（VL）为准
               </p>
             ) : (
               <p style={{ fontSize: 13, color: "#888" }}>未上传凭证，OCR 未执行</p>
+            )}
+
+            {/* 工单6 扩展：Qwen2.5-VL 图片语义理解（凭证一致性校验输入）
+                三种展示：正常语义 -> 蓝色描述块；降级/拦截原因文案（后端以"（"开头落库）
+                -> 黄色⚠️提示块，让排查一眼区分"Ollama 挂了"还是"图有问题"；空 -> 兜底 */}
+            <h3 style={{ fontSize: 13, margin: "14px 0 6px" }}>🖼 图片语义理解（VL）</h3>
+            {evidence?.vision_text ? (
+              evidence.vision_text.startsWith("（") ? (
+                <p style={{ fontSize: 13, color: "#9a6b00", background: "#fff8e1", padding: 10, borderRadius: 6, margin: 0 }}>
+                  ⚠️ {evidence.vision_text}
+                </p>
+              ) : (
+                <>
+                  <pre style={{ background: "#f1f8fe", padding: 10, borderRadius: 6, whiteSpace: "pre-wrap", fontSize: 13, margin: 0 }}>{evidence.vision_text}</pre>
+                  <p style={{ fontSize: 12, color: "#666", marginTop: 6 }}>
+                    视觉模型（Qwen2.5-VL）识别结果，已脱敏；供风控做凭证一致性校验
+                  </p>
+                </>
+              )
+            ) : (
+              <p style={{ fontSize: 13, color: "#888" }}>未生成视觉描述（无凭证上传时不执行 VL）</p>
             )}
           </section>
 
@@ -269,6 +298,40 @@ export default function CaseDetailPage() {
               <span>舆情 {detail.sentiment_score?.toFixed(2) ?? "-"}</span>
               <span>综合 {detail.risk_score?.toFixed(2) ?? "-"}</span>
             </div>
+          </section>
+
+          {/* 凭证一致性独立面板（从 fraud_score 拆出，规则优先 + LLM 兜底，可解释可审计） */}
+          <section style={{ ...card, marginBottom: 14 }}>
+            <h2 style={{ fontSize: 15, margin: "0 0 10px" }}>🧾 凭证一致性</h2>
+            {detail.consistency_level ? (
+              <>
+                <p style={line}>
+                  判定：
+                  <span
+                    style={{
+                      padding: "2px 10px",
+                      borderRadius: 12,
+                      fontSize: 13,
+                      color: "#fff",
+                      background: CONSISTENCY_META[detail.consistency_level]?.color ?? "#868e96",
+                    }}
+                  >
+                    {CONSISTENCY_META[detail.consistency_level]?.label ?? detail.consistency_level}
+                  </span>
+                  {!!detail.consistency_penalty && (
+                    <span style={{ color: "#dc3545", marginLeft: 8, fontSize: 13 }}>
+                      风险信号 +{(detail.consistency_penalty * 100).toFixed(0)} 分（独立展示，不并入风控分）
+                    </span>
+                  )}
+                </p>
+                {detail.consistency_dimensions?.length > 0 && (
+                  <p style={line}>不符维度：{detail.consistency_dimensions.join("；")}</p>
+                )}
+                <p style={line}>依据：{detail.consistency_reason ?? "-"}</p>
+              </>
+            ) : (
+              <p style={{ fontSize: 13, color: "#888" }}>未生成一致性判定（无凭证或旧案件）</p>
+            )}
           </section>
 
           {/* 意图识别（双层）：工单8 */}

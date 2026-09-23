@@ -57,6 +57,33 @@ def create_risk_providers():
     return FakeMergedRiskProvider()
 
 
+def create_vision_provider():
+    """视觉理解 Provider：Qwen2.5-VL via 本地 Ollama（凭证图片语义描述）。
+
+    降级策略（延续"降级不阻断"哲学，绝不造假）：
+    - 测试(TESTING=1) / use_fake_providers / vision_enabled=false / Ollama 不可达
+      -> NoopVisionProvider（跳过一致性校验，不加分不阻断，不编造图片描述）。
+    """
+    import os
+
+    from app.agents.vision import NoopVisionProvider, OllamaVisionProvider
+
+    settings = get_settings()
+    if os.environ.get("TESTING") == "1" or settings.use_fake_providers:
+        logger.warning("视觉理解使用 NoopProvider（测试/隔离，跳过凭证一致性校验）")
+        return NoopVisionProvider()
+    if not settings.vision_enabled:
+        logger.warning("VISION_ENABLED=false：视觉理解已关闭（跳过 VL）")
+        return NoopVisionProvider()
+    provider = OllamaVisionProvider()
+    if not provider.available:
+        logger.warning("Ollama 不可达（%s）：视觉理解降级 Noop（一致性校验跳过）",
+                       settings.ollama_base_url)
+        return NoopVisionProvider()
+    logger.info("视觉 Provider: OllamaVisionProvider(%s)", provider.model)
+    return provider
+
+
 def create_order_verify_provider():
     """订单三查 Provider：默认真实查库（资损红线）；use_fake_providers 时放行（测试/调试）。"""
     settings = get_settings()
@@ -111,6 +138,7 @@ def configure_providers() -> None:
     from app.workflow import nodes
 
     nodes.ocr_provider = create_ocr_provider()
+    nodes.vision_provider = create_vision_provider()
     nodes.merged_risk_provider = create_risk_providers()
     nodes.order_verify_provider = create_order_verify_provider()
     nodes.critic_provider = create_critic_provider()

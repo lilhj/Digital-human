@@ -1,6 +1,6 @@
 /** 应用路由：
  *  运营侧（员工 JWT 守卫 + 六域侧边栏）：/ 工作台、/batch 批量审批、/eval 评测、/security 安全、/intent 意图、/telemetry 监控、/cases/:id 详情
- *  买家侧（/buyer/*）：商城、商品详情、购物车、结算、订单、售后申请/列表
+ *  买家侧（/buyer/*）：商城、商品详情、购物车、结算、订单、售后申请/列表、数字人直播
  */
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { getToken } from "./api/client";
@@ -23,6 +23,7 @@ import CheckoutPage from "./pages/buyer/CheckoutPage";
 import OrdersPage from "./pages/buyer/OrdersPage";
 import AfterSaleApplyPage from "./pages/buyer/AfterSaleApplyPage";
 import AfterSaleListPage from "./pages/buyer/AfterSaleListPage";
+import LiveSellPage from "./pages/buyer/LiveSellPage";
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   return getToken() ? <>{children}</> : <Navigate to="/login" replace />;
@@ -64,6 +65,8 @@ export default function App() {
           <Route path="orders" element={<OrdersPage />} />
           <Route path="orders/:id/after-sale" element={<AfterSaleApplyPage />} />
           <Route path="aftersale" element={<AfterSaleListPage />} />
+          {/* 数字人卖货直播（Phase 0 静态骨架） */}
+          <Route path="live" element={<LiveSellPage />} />
           {/* 旧路径兼容（信息架构 §3 已统一为 orders/:id/after-sale） */}
           <Route path="aftersale/apply/:id" element={<Navigate to="/buyer/orders" replace />} />
         </Route>

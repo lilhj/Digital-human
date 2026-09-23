@@ -1,4 +1,4 @@
-/** 买家侧布局：顶部导航（商城 / 购物车 / 我的订单 / 我的售后）+ 登录状态 + <Outlet/>。 */
+/** 买家侧布局：顶部导航（商城 / 购物车 / 我的订单 / 我的售后 / 数字人直播）+ 登录状态 + <Outlet/>。 */
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { clearBuyer, getBuyer } from "../api/client";
 import { cartCount } from "../api/mockBuyer";
@@ -47,6 +47,7 @@ export default function BuyerLayout() {
           </NavLink>
           <NavLink to="/buyer/orders" style={navStyle}>我的订单</NavLink>
           <NavLink to="/buyer/aftersale" style={navStyle}>我的售后</NavLink>
+          <NavLink to="/buyer/live" style={navStyle}>数字人直播</NavLink>
         </nav>
         {buyer ? (
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>

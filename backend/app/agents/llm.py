@@ -67,7 +67,26 @@ class LLMClient:
         return bool(self.api_key)
 
     def chat_json(self, system: str, user: str) -> dict:
-        """请求模型输出严格 JSON，带指数退避重试；重试后仍失败抛 LLMOutputError。"""
+        """请求模型输出严格 JSON，带指数退避重试；重试后仍失败抛 LLMOutputError。
+
+        兼容旧签名：结果同时写入 self.last_usage（单线程调用方的便捷读取点）。
+        并发/并行采样场景请改用 chat_json_with_usage()——它返回本次调用的独立 usage，
+        不依赖共享的 self.last_usage（避免多线程互相覆盖，token 统计失真）。
+        """
+        data, usage = self._chat_json_impl(system, user)
+        self.last_usage = usage
+        return data
+
+    def chat_json_with_usage(self, system: str, user: str) -> tuple[dict, dict | None]:
+        """线程安全版本：返回 (data, usage)，usage 为本次调用的独立副本。
+
+        供 MergedRiskProvider 并行采样使用——各线程拿自己的 usage，
+        不写共享的 self.last_usage，token 统计不因并发而错乱。
+        """
+        return self._chat_json_impl(system, user)
+
+    def _chat_json_impl(self, system: str, user: str) -> tuple[dict, dict | None]:
+        """实际请求实现：返回 (解析后的 dict, 本次 token 用量)。"""
         if not self.available:
             raise LLMOutputError("LLM 未配置 api_key（开发环境请用 FakeProvider）")
 
@@ -91,9 +110,7 @@ class LLMClient:
                     body = resp.json()
                     raw = body["choices"][0]["message"]["content"]
                     data = self._parse(raw)
-                    # telemetry：记录本次真实 token 用量（供运营商页/详情页读取）
-                    self.last_usage = _parse_usage(body.get("usage"))
-                    return LLMResult(raw=raw, data=data).data
+                    return data, _parse_usage(body.get("usage"))
             except (httpx.HTTPError, KeyError, IndexError, json.JSONDecodeError, LLMOutputError) as e:
                 last_err = e
                 logger.warning("LLM 调用失败(第%s次): %s", attempt + 1, e)

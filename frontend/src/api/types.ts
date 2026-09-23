@@ -36,6 +36,8 @@ export interface Evidence {
   ocr_text: string | null;
   ocr_confidence: number | null;
   parse_status: string | null;
+  // 工单6 扩展：Qwen2.5-VL 图片语义理解（凭证一致性校验输入，DLP 脱敏展示）
+  vision_text: string | null;
 }
 
 export interface CaseDetail {
@@ -51,6 +53,11 @@ export interface CaseDetail {
   risk_score: number | null;
   decision: string | null;
   review_reason: string | null;
+  // 凭证一致性独立信号（从 fraud_score 拆出，详情页独立面板）
+  consistency_level: string | null;
+  consistency_dimensions: string[];
+  consistency_reason: string | null;
+  consistency_penalty: number | null;
   // 工单8 意图识别
   intent: string | null;
   intent_source: string | null;

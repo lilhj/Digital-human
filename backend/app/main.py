@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.api import admin_users, auth, cases, dashboard, events, intent, review_tasks, security, telemetry
+from app.api import admin_users, auth, cases, dashboard, events, intent, live, review_tasks, security, telemetry
 from app.api import cart, customer_auth, orders, products
 from app.batch import api as batch_api
 from app.core.config import get_settings
@@ -72,6 +72,7 @@ app.include_router(products.router)
 app.include_router(cart.router)
 app.include_router(orders.router)
 app.include_router(rag_chat.router)
+app.include_router(live.router)
 
 # L-5 修复：凭证上传目录静态服务（image_url 为 /uploads/<uuid>.ext，此处直接可下载/预览）
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")

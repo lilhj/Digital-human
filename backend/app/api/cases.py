@@ -288,7 +288,25 @@ def get_case(
     case = db.get(RefundCase, case_id)
     if case is None:
         raise HTTPException(status_code=404, detail={"code": "CASE_NOT_FOUND", "message": "案件不存在"})
-    return case
+
+    # 附加凭证一致性独立信号：从 FRAUD AgentRun.output 取（规则层判定，落库的权威展示源）
+    from app.domain.models import AgentRun
+
+    run = (
+        db.query(AgentRun)
+        .filter(AgentRun.case_id == case_id, AgentRun.agent_name == "FRAUD")
+        .order_by(AgentRun.id.desc())
+        .first()
+    )
+    out = (run.output_json or {}) if run else {}
+    return CaseDetailOut.model_validate(case).model_copy(
+        update={
+            "consistency_level": out.get("consistency_level"),
+            "consistency_dimensions": out.get("consistency_dimensions", []),
+            "consistency_reason": out.get("consistency_reason"),
+            "consistency_penalty": out.get("consistency_penalty"),
+        }
+    )
 
 
 @router.post("/{case_id}/decision", response_model=DecisionResponse)

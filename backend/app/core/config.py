@@ -53,6 +53,13 @@ class Settings(BaseSettings):
     # 场景二联调开关（Loop Phase 9："使用测试配置返回低风险结果"）
     use_fake_providers: bool = False
 
+    # ---- 视觉理解（Qwen2.5-VL via 本地 Ollama，凭证一致性校验）----
+    ollama_base_url: str = "http://localhost:11434"   # Ollama 服务地址
+    vision_model: str = "qwen2.5vl:7b"               # 视觉语言模型
+    vision_timeout_seconds: int = 120                # VL 推理超时（本地 7B 较慢）
+    vision_enabled: bool = True                      # 总开关；关闭则跳过 VL（静默降级）
+    evidence_inconsistent_penalty: float = 0.30      # 凭证与描述不一致 → 风险分 +30 分
+
     # ---- 工单5 移植：批量审批沙箱（SANDBOX_MODE off/on 双模式）----
     sandbox_mode: str = "off"            # off=宿主机直读（漏洞基线） on=真沙箱隔离解析
     e2b_api_url: str = "http://127.0.0.1:13000"
@@ -61,6 +68,22 @@ class Settings(BaseSettings):
     e2b_sandbox_url: str = ""            # 本地 CubeSandbox 执行端点改写（支持 {sandbox_id}）
     approval_batch_size: int = 50        # 批量审批单次上限
     approval_export_limit: int = 500     # 导出挂起单上限
+
+    # ---- 数字人直播（算力云自部署：CosyVoice2 TTS + MuseTalk 口型）----
+    # 渲染服务：AutoDL 实例上的 FastAPI（dh_api），本机经 SSH 隧道访问时填隧道地址。
+    # 留空则直播接口返回未配置。渲染一句话术约 1~2 分钟，HTTP 超时要给足。
+    dh_api_base_url: str = "http://127.0.0.1:8600"
+    dh_api_timeout_seconds: int = 300
+    dh_idle_video_path: str = "/videos/idle.mp4"   # 未播话术时前端循环的待机视频
+    # 直播对话大脑（与工作流 LLM 分开配置：话术要口语自然，且模型可独立切换）
+    live_llm_model: str = "deepseek-v4-flash"
+    live_llm_temperature: float = 0.7
+    live_llm_timeout_seconds: int = 20
+    # 自动讲解（SOP 骨架 + LLM 轮换）
+    live_touting_enabled: bool = True        # 开播后是否自动循环讲解
+    live_touting_gap_seconds: float = 0.8    # 段落之间的换气停顿（0.5~3 之间较自然）
+    live_touting_gap_jitter: float = 0.3     # 停顿抖动幅度（秒）：实际停在 gap±jitter 内随机，0=固定
+    live_touting_use_llm: bool = True        # true=LLM 改写换说法；false=只用脚本骨架兜底话术
 
     # ---- 工单5 移植：Langfuse 链路追踪 ----
     langfuse_secret_key: str = ""

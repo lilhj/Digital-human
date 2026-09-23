@@ -117,11 +117,21 @@ class PaddleOcrProvider(OcrProvider):
             for t, s in zip(texts, scores):
                 if t is None:
                     continue
-                lines.append(str(t))
+                line = str(t).strip()
+                # 过滤空白行：检测器误检的"假文字框"（反光/阴影/纹理/裂纹）识别出空白，
+                # 计入平均置信度会稀释真实文字行的分数（实物破损照实测 0.546 的根因）。
+                if not line:
+                    continue
+                lines.append(line)
                 total_conf += float(s or 0.0)
                 count += 1
         elapsed = time.time() - started
         text = "\n".join(lines)
+        if not text:
+            # 识别文本为空（图内无可识别文字，如实物破损照片）-> EMPTY：
+            # 不返回无意义的误检置信度（0.546 这类），交由 evidence_node 按"证据不足"处理，
+            # 决策层走 EMPTY 分支转人工复核，不再误触"OCR 置信度预警"文案。
+            return OcrResult(text="", confidence=None, status="EMPTY")
         confidence = round(total_conf / count, 3) if count else 0.0
         status = "OK" if confidence >= 0.5 else "LOW_CONFIDENCE"
         logger.info("OCR 完成: %d 行, 置信度 %.3f, 耗时 %.2fs", count, confidence, elapsed)

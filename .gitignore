@@ -29,3 +29,10 @@ backend/e2e_verify_intent.py
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# ---- 本地工具/临时产物 ----
+.workbuddy/
+*.pptx
+
+# ---- 根目录上传残留（后端上传目录为 backend/uploads，已单独忽略）----
+/uploads/

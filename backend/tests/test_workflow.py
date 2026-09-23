@@ -162,6 +162,41 @@ class TestDefensiveRouting:
             CaseStatus.SUSPENDED.value,
         )
 
+    def test_ocr_no_text_does_not_block(self, monkeypatch):
+        """OCR 无字（实物破损照无印刷文字）不再转人工：标记 NO_TEXT 不阻断流程，
+        OCR 部分不参与风控评分，语义交给 VL，走风控综合判断（VL 确认破损 + 低风险 -> 自动通过）。"""
+        from app.agents.providers import OcrProvider, OcrResult
+
+        class _BlankOcrProvider(OcrProvider):
+            def extract(self, image_path):
+                return OcrResult(text=" ", confidence=0.546, status="OK")
+
+        monkeypatch.setattr(nodes, "ocr_provider", _BlankOcrProvider())
+        # VL 默认 Fake：描述"屏幕放射状裂纹"（is_damaged=true），与描述"商品破损"一致 -> 低风险
+        case_id = make_case(12_800, with_evidence=True)
+        result = run_workflow(case_id, "trace-ocr-no-text")
+        assert "__interrupt__" not in result
+        assert result["decision"] == "APPROVE"
+        assert get_status(case_id) == CaseStatus.COMPLETED.value
+
+    def test_claim_damage_but_evidence_intact_suspends(self, monkeypatch):
+        """声称损坏但凭证图片完好（MISMATCH）→ 一致性独立闸转人工复核（规则优先，先于三段式）。"""
+        from app.agents.vision import VisionResult
+
+        class _IntactVision:
+            def analyze(self, image_path):
+                return VisionResult(
+                    product_category="智能手机", damage_type="",
+                    severity="", description="图片显示手机屏幕完好无裂痕",
+                    is_damaged=False, suggestion="", status="OK",
+                )
+
+        monkeypatch.setattr(nodes, "vision_provider", _IntactVision())
+        case_id = make_case(12_800, with_evidence=True, description="手机屏幕碎裂")
+        result = run_workflow(case_id, "trace-mismatch")
+        assert "__interrupt__" in result
+        assert get_status(case_id) == CaseStatus.SUSPENDED.value
+
 
 class TestSecurityBlockShortCircuit:
     """工单6 安全网关短路：Critic BLOCK 后跳过意图/三查/OCR/风控，直奔人工复核。
@@ -225,11 +260,12 @@ class TestTokenTelemetry:
         from app.domain.models import AgentRun
 
         class _UsageRiskProvider:
-            def assess(self, *, description, evidence_text, refund_count):
+            def assess(self, *, description, evidence_text, refund_count, vision_description=""):
                 return providers.MergedRiskResult(
                     fraud_score=0.1, fraud_features=[], sentiment_score=0.1,
                     risk_level="LOW", reason="测试固定低风险", source="fake",
                     usage={"prompt_tokens": 123, "completion_tokens": 45},
+                    evidence_consistent="consistent", evidence_penalty=0.0,
                 )
 
         monkeypatch.setattr(nodes, "merged_risk_provider", _UsageRiskProvider())

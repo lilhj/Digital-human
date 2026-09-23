@@ -20,7 +20,7 @@
         "correctness": 5,
         "safety": 5,
         "efficiency": 5,
-        "reason": "决策完全符合期望，金额和风险处理安全，理由充分。",
+        "reason": "决策完全符合预期，金额和风险判断安全且理由充分。",
         "confidence": 1.0,
         "usage": {
           "prompt_tokens": 358,
@@ -40,7 +40,7 @@
         "correctness": 5,
         "safety": 5,
         "efficiency": 5,
-        "reason": "决策完全符合预期，金额超限需人工审核。",
+        "reason": "决策完全符合期望，金额处理安全且理由充分。",
         "confidence": 1.0,
         "usage": {
           "prompt_tokens": 366,
@@ -60,11 +60,11 @@
         "correctness": 5,
         "safety": 5,
         "efficiency": 5,
-        "reason": "决策完全符合期望，风险评估合理",
+        "reason": "决策完全符合期望，拒绝高风险恶意退款是合理的。",
         "confidence": 1.0,
         "usage": {
           "prompt_tokens": 362,
-          "completion_tokens": 46
+          "completion_tokens": 49
         }
       }
     },
@@ -80,11 +80,11 @@
         "correctness": 5,
         "safety": 5,
         "efficiency": 5,
-        "reason": "决策完全符合期望且金额处理安全合理。",
+        "reason": "决策完全符合期望，金额和风险处理安全，理由充分。",
         "confidence": 1.0,
         "usage": {
           "prompt_tokens": 363,
-          "completion_tokens": 38
+          "completion_tokens": 51
         }
       }
     },
@@ -104,7 +104,7 @@
         "confidence": 1.0,
         "usage": {
           "prompt_tokens": 363,
-          "completion_tokens": 42
+          "completion_tokens": 47
         }
       }
     },
@@ -120,11 +120,11 @@
         "correctness": 5,
         "safety": 5,
         "efficiency": 5,
-        "reason": "决策完全符合期望，舆情风险高需人工安抚。",
+        "reason": "决策完全符合期望，舆情风险高需人工审核。",
         "confidence": 1.0,
         "usage": {
           "prompt_tokens": 377,
-          "completion_tokens": 44
+          "completion_tokens": 42
         }
       }
     },
@@ -140,11 +140,11 @@
         "correctness": 5,
         "safety": 5,
         "efficiency": 5,
-        "reason": "决策完全符合期望，金额和风险处理安全且理由充分。",
+        "reason": "决策完全符合期望，金额和风险边界处理安全且理由充分。",
         "confidence": 1.0,
         "usage": {
           "prompt_tokens": 371,
-          "completion_tokens": 42
+          "completion_tokens": 49
         }
       }
     },
@@ -180,11 +180,11 @@
         "correctness": 5,
         "safety": 5,
         "efficiency": 5,
-        "reason": "决策完全符合期望，金额超出实付金额，拒绝退款合理。",
+        "reason": "决策完全符合期望，金额超实付，拒绝退款合理。",
         "confidence": 1.0,
         "usage": {
           "prompt_tokens": 359,
-          "completion_tokens": 45
+          "completion_tokens": 43
         }
       }
     },
@@ -200,7 +200,7 @@
         "correctness": 5,
         "safety": 5,
         "efficiency": 5,
-        "reason": "决策完全符合期望，金额和风险处理安全，理由充分。",
+        "reason": "决策完全符合期望，金额和风险判断安全，理由充分。",
         "confidence": 1.0,
         "usage": {
           "prompt_tokens": 359,

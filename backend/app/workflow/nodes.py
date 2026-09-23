@@ -19,6 +19,7 @@ from app.agents.providers import (
     MergedRiskProvider,
     OcrProvider,
 )
+from app.agents.vision import FakeVisionProvider, VisionProvider
 from app.core.config import get_settings
 from app.core.database import SessionLocal
 from app.domain.models import (
@@ -65,6 +66,9 @@ settings = get_settings()
 
 # Provider 注入点（Phase 6 替换为真实 PaddleOCR / LLM 实现；测试可 monkeypatch）
 ocr_provider: OcrProvider = FakeOcrProvider()
+# 视觉理解（Qwen2.5-VL via Ollama）：凭证图片语义描述 -> 风控一致性校验；
+# 默认 Fake（演示确定性）；生产由 factory 注入 Ollama/Noop（Ollama 不可达静默跳过）。
+vision_provider: VisionProvider = FakeVisionProvider()
 # 工单5 成本优化移植：Fraud+Sentiment 两次 LLM 调用合并为一次（MergedRiskProvider）
 merged_risk_provider: MergedRiskProvider = FakeMergedRiskProvider()
 decision_policy: DecisionPolicy = DecisionPolicy()
@@ -321,6 +325,19 @@ def _security_block_reason(risk_score: float | None) -> str:
     return f"安全网关拦截：描述含越权/注入指令（风险分 {float(risk_score or 0.0):.2f}），转人工复核"
 
 
+def _vision_fallback_reason(status: str) -> str:
+    """VL 降级原因落库文案（前端分情况展示，排查不用猜）。
+
+    VisionResult.status 值域：UNAVAILABLE（Ollama 不可达/未配置）/ TIMEOUT（推理超时）/
+    PARSE_ERROR（输出非标准 JSON）；其余（如 OK 但描述为空）兜底统一文案。
+    """
+    return {
+        "UNAVAILABLE": "（Ollama 不可用，已静默跳过视觉理解）",
+        "TIMEOUT": "（视觉理解推理超时，已静默跳过）",
+        "PARSE_ERROR": "（视觉模型输出无法解析，已静默跳过）",
+    }.get(status, "（视觉理解不可用，已静默跳过）")
+
+
 # ---------- 节点 ----------
 
 @record_agent_run("INTAKE")
@@ -522,7 +539,15 @@ def evidence_node(state: RefundWorkflowState) -> RefundWorkflowState:
 
     # L-5：image_url 落库为 URL 路径（/uploads/x 或旧相对 uploads/x），
     # OCR 内核按磁盘路径读取，统一归一化为 uploads 目录下的绝对路径。
-    result = ocr_provider.extract(image_url_to_disk(evidence.image_url))
+    disk_path = image_url_to_disk(evidence.image_url)
+    result = ocr_provider.extract(disk_path)
+
+    # OCR 无字判定（有图但识别文本为空，如实物破损照片）：
+    # 不阻断流程、OCR 部分不参与风控评分，仅作展示标记 NO_TEXT（见最终 return 注释）。
+    # 排除 TIMEOUT：超时是异常态，仍走 TIMEOUT 转人工。
+    no_text = (result.status != "TIMEOUT") and (
+        result.status == "EMPTY" or not (result.text or "").strip()
+    )
 
     # OCR 结果回写证据表（前端详情页展示识别文字与置信度）。
     # L-4 修复：落库前经 DLP 脱敏，收据/订单上的明文手机号、身份证等 PII
@@ -533,8 +558,8 @@ def evidence_node(state: RefundWorkflowState) -> RefundWorkflowState:
         ev = db.get(CaseEvidence, evidence.id)
         if ev:
             ev.ocr_text = dlp_provider.mask(result.text)
-            ev.ocr_confidence = result.confidence
-            ev.parse_status = result.status
+            ev.ocr_confidence = None if no_text else result.confidence
+            ev.parse_status = "NO_TEXT" if no_text else result.status
             db.commit()
     finally:
         db.close()
@@ -546,10 +571,65 @@ def evidence_node(state: RefundWorkflowState) -> RefundWorkflowState:
             "evidence_status": "TIMEOUT",
             "errors": ["OCR_TIMEOUT"],
         }
+
+    # ---- 视觉理解（Qwen2.5-VL）：图片语义描述 → 风控凭证一致性校验 ----
+    # VL 输出可能携带图内文字（含 SN/IMEI/恶意指令），两道处理：
+    #   ① 安全：description 先过 Critic 语义安检，BLOCK → 短路转人工、不喂下游模型；
+    #   ② 隐私：落库前经 DLP 脱敏（图内可能印手机号/面单信息）。
+    # vision_text 落库区分三种情况，前端分情况展示、排查不用猜：
+    #   正常语义 -> 描述本身（脱敏）；Critic 拦截 / Ollama 不可用 / 推理超时 / 输出异常 -> 原因文案。
+    # 结构化字段透传：is_damaged/severity/category/damage_type 进 state，供
+    # 凭证一致性规则层做确定性比对（不止用 description 文本）。
+    vision_description = ""
+    vision_security_blocked = False
+    vision_is_damaged: bool | None = None
+    vision_severity = ""
+    vision_category = ""
+    vision_damage_type = ""
+    vision_result = vision_provider.analyze(disk_path)
+    if vision_result.available:
+        critic = critic_provider.analyze(vision_result.description)
+        if critic.blocked:
+            vision_security_blocked = True
+            vision_description = "（图片内容含潜在注入风险，已拦截，未提交给风险模型）"
+            vision_persist = "（图片内容含潜在注入风险，已拦截）"
+            # 拦截：不利用图内信息做一致性判定（图内可能携带注入指令）
+        else:
+            vision_description = vision_result.description
+            vision_persist = dlp_provider.mask(vision_result.description)
+            vision_is_damaged = vision_result.is_damaged
+            vision_severity = vision_result.severity
+            vision_category = vision_result.product_category
+            vision_damage_type = vision_result.damage_type
+    else:
+        vision_persist = _vision_fallback_reason(vision_result.status)
+    db = SessionLocal()
+    try:
+        ev = db.get(CaseEvidence, evidence.id)
+        if ev:
+            ev.vision_text = vision_persist
+            db.commit()
+    finally:
+        db.close()
+
+    # 识别文本为空（图内无可识别文字，如实物破损照片）-> 标记 NO_TEXT：
+    # ① 不阻断流程、不转人工 —— OCR 只是"抽字"，抽不到字不代表凭证无效，
+    #    语义理解交给 VL（对无文字图仍能描述破损），风控照常综合判断；
+    # ② OCR 部分不参与风控评分 —— evidence_text 置空、置信度置 None，
+    #    不给无意义的误检置信度（0.546 这类）进决策层；
+    # ③ VL 描述（若可用）照常进入 state 与落库，供风控做"VL 语义 vs 用户描述"
+    #    的一致性比对，也供前端详情页展示。
     return {
-        "evidence_text": result.text,
-        "ocr_confidence": result.confidence,
-        "evidence_status": result.status,
+        "evidence_text": "" if no_text else result.text,
+        "ocr_confidence": None if no_text else result.confidence,
+        "evidence_status": "NO_TEXT" if no_text else result.status,
+        "vision_description": vision_description,
+        "vision_security_blocked": vision_security_blocked,
+        # VL 结构化字段透传（凭证一致性规则层判定输入）
+        "vision_is_damaged": vision_is_damaged,
+        "vision_severity": vision_severity,
+        "vision_category": vision_category,
+        "vision_damage_type": vision_damage_type,
     }
 
 
@@ -564,7 +644,19 @@ def fraud_node(state: RefundWorkflowState) -> RefundWorkflowState:
         description=state.get("description", ""),
         evidence_text=state.get("evidence_text", ""),
         refund_count=state.get("refund_count", 0),
+        vision_description=state.get("vision_description", ""),
     )
+    # 凭证一致性独立判定（规则优先，LLM 兜底）：从 fraud_score 拆出的独立信号。
+    # 规则层用 VL 结构化字段（is_damaged/severity）与描述做确定性比对（零 LLM、可解释）；
+    # 规则判不了（UNCERTAIN）时才用合并调用里 LLM 的 evidence_consistent 兜底。
+    from app.policy.evidence_consistency import evaluate_rule, merge_with_llm
+
+    rule = evaluate_rule(
+        description=state.get("description", ""),
+        is_damaged=state.get("vision_is_damaged"),
+        severity=state.get("vision_severity", ""),
+    )
+    cons = merge_with_llm(rule, result.evidence_consistent)
     return {
         "fraud_score": result.fraud_score,
         "fraud_features": result.fraud_features,
@@ -572,6 +664,14 @@ def fraud_node(state: RefundWorkflowState) -> RefundWorkflowState:
         "risk_level": result.risk_level,
         # 工单5 锚定优化：LLM 打分理由一并写入 state，供追溯（AgentRun.output 可见）
         "risk_reason": result.reason,
+        # LLM 兜底信号（consistent/uncertain/inconsistent）；penalty 恒 0（不污染风控分）
+        "evidence_consistent": result.evidence_consistent,
+        "evidence_penalty": result.evidence_penalty,
+        # 凭证一致性独立信号（规则优先，LLM 兜底）：决策独立响应 + 前端独立展示
+        "consistency_level": cons.level,
+        "consistency_dimensions": cons.dimensions,
+        "consistency_reason": cons.reason,
+        "consistency_penalty": cons.penalty,
         # telemetry：真实 LLM token 用量（多采样已累加；规则路径 None），由装饰器落 AgentRun 专列
         "token_usage": result.usage,
     }
@@ -609,6 +709,35 @@ def decision_node(state: RefundWorkflowState) -> RefundWorkflowState:
             state["decision"],
             state.get("review_reason") or state.get("order_verify_reason", ""),
         )
+    # 工单6 扩展：凭证图片 VL 描述命中 Critic（图内注入指令）→ 强制转人工复核
+    elif state.get("vision_security_blocked"):
+        d = Decision(
+            DECISION_HUMAN_REVIEW,
+            "凭证图片内容含潜在注入风险，已拦截并转人工复核",
+        )
+    # ④ 凭证一致性独立闸（从 fraud_score 拆出，规则优先，LLM 兜底）：
+    #    MISMATCH + 高频退款 -> 直接拒（薅羊毛特征叠加，MVP 下 refund_count 恒 0 暂不触发）；
+    #    MISMATCH / PARTIAL / UNCERTAIN -> 转人工（带不符维度原因，审核员看原图裁决）；
+    #    描述与图片一致（MATCH / 无凭证）-> 放行到常规三段式。
+    elif state.get("consistency_level") in ("MISMATCH", "PARTIAL", "UNCERTAIN"):
+        level = state.get("consistency_level")
+        dims = state.get("consistency_dimensions", [])
+        dim_text = "；".join(dims) if dims else state.get("consistency_reason", "")
+        if level == "MISMATCH" and state.get("refund_count", 0) >= 3:
+            d = Decision(
+                DECISION_REJECT,
+                "声称损坏但凭证图片完好，且历史高频退款，疑似薅羊毛",
+            )
+        else:
+            label = {
+                "MISMATCH": "凭证与描述不符",
+                "PARTIAL": "凭证与描述存在出入",
+                "UNCERTAIN": "凭证信息不足",
+            }.get(level, "凭证一致性存疑")
+            d = Decision(
+                DECISION_HUMAN_REVIEW,
+                f"{label}（{dim_text}），转人工复核",
+            )
     else:
         d = decision_policy.decide(
             amount_cent=state["amount_cent"],

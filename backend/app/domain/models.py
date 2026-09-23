@@ -1,11 +1,14 @@
 """领域模型：7 张核心表（规格 docs/06 第 9 节 + Loop 提示词 Phase 2）。
 
 金额一律整数分（BIGINT），禁止浮点。
+时间列统一用 UTCDateTime：数据库存 UTC 墙钟（naive），ORM 读写时归一化/标记时区，
+修复"创建时间差 8 小时"（DB 存 UTC、前端 naive 误当本地）。
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 
 from sqlalchemy import (
+    DateTime,
     BigInteger,
     Boolean,
     ForeignKey,
@@ -19,13 +22,47 @@ from sqlalchemy import (
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.types import TypeDecorator
 
 from app.core.database import Base
 from app.domain.status import CaseStatus
 
 
-def _now() -> datetime:
-    return datetime.now()
+def _local_tz():
+    """进程本地时区（兼容 Python datetime.now() 产生的 naive 本地墙钟）。"""
+    try:
+        return datetime.now().astimezone().tzinfo
+    except Exception:  # noqa: BLE001 - 取不到本地时区时回退 UTC
+        return timezone.utc
+
+
+class UTCDateTime(TypeDecorator):
+    """统一 UTC 存储 + 输出带时区（修复 created_at 等时间显示差 8 小时）。
+
+    数据库列保持 `timestamp without time zone`（naive，DDL 不变，无需 migration），但：
+    - 写入（process_bind_param）：aware 值转 UTC naive 存储；naive 值假定为进程本地
+      墙钟转 UTC naive 存储——兼容两种写入源并统一归一化到 UTC：
+        ① server_default=func.now()（PG 会话时区 UTC -> UTC 墙钟）；
+        ② 代码内 datetime.now()（本地墙钟，如 paid_at/AgentRun 时间）。
+      同时让 ORM 比较（如 dashboard/intent 的 today_start 边界）经 bind 转 UTC，统计正确。
+    - 读取（process_result_value）：naive 值标记为 UTC aware，Pydantic 序列化带
+      +00:00，前端 new Date("...Z") 自动转本地展示。
+    """
+
+    impl = DateTime
+    cache_ok = True
+
+    def process_bind_param(self, value, dialect):
+        if value is None:
+            return None
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=_local_tz())
+        return value.astimezone(timezone.utc).replace(tzinfo=None)
+
+    def process_result_value(self, value, dialect):
+        if value is None:
+            return None
+        return value.replace(tzinfo=timezone.utc)
 
 
 class OrderStatus(str, Enum):
@@ -77,9 +114,9 @@ class RefundCase(Base):
     idempotency_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=0)  # 乐观锁
 
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
-        server_default=func.now(), onupdate=func.now()
+        UTCDateTime(), server_default=func.now(), onupdate=func.now()
     )
 
     evidences: Mapped[list["CaseEvidence"]] = relationship(back_populates="case")
@@ -99,9 +136,11 @@ class CaseEvidence(Base):
     file_hash: Mapped[str | None] = mapped_column(String(64))  # SHA-256
     ocr_text: Mapped[str | None] = mapped_column(Text)
     ocr_confidence: Mapped[float | None] = mapped_column(Numeric(4, 3))
-    parse_status: Mapped[str] = mapped_column(String(20), default="OK")  # OK/TIMEOUT/LOW_CONFIDENCE
+    parse_status: Mapped[str] = mapped_column(String(20), default="OK")  # OK/TIMEOUT/LOW_CONFIDENCE/NO_TEXT
+    # 工单6 扩展：Qwen2.5-VL 图片语义理解（DLP 脱敏后落库，前端详情页展示"图片语义理解"）
+    vision_text: Mapped[str | None] = mapped_column(Text)
 
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
 
     case: Mapped["RefundCase"] = relationship(back_populates="evidences")
 
@@ -120,8 +159,8 @@ class AgentRun(Base):
     input_json: Mapped[dict | None] = mapped_column(JSONB)
     output_json: Mapped[dict | None] = mapped_column(JSONB)
     error_tag: Mapped[str | None] = mapped_column(String(32))  # OCR_TIMEOUT/AI_PARSE_ERROR/...
-    started_at: Mapped[datetime | None] = mapped_column()
-    finished_at: Mapped[datetime | None] = mapped_column()
+    started_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    finished_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
     duration_ms: Mapped[int | None] = mapped_column(Integer)
     # telemetry（工单5 可观测）：节点内 LLM 调用的累计 token（真实 usage，非 Fake/规则路径为 NULL）
     prompt_tokens: Mapped[int | None] = mapped_column(Integer)
@@ -142,7 +181,7 @@ class RiskAssessment(Base):
     risk_level: Mapped[str | None] = mapped_column(String(10))  # LOW / MEDIUM / HIGH
     rule_version: Mapped[str | None] = mapped_column(String(32))
     raw_json: Mapped[dict | None] = mapped_column(JSONB)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
 
 
 class ReviewTask(Base):
@@ -161,9 +200,9 @@ class ReviewTask(Base):
     approver_id: Mapped[str | None] = mapped_column(String(64))
     comment: Mapped[str | None] = mapped_column(Text)
     idempotency_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
-        server_default=func.now(), onupdate=func.now()
+        UTCDateTime(), server_default=func.now(), onupdate=func.now()
     )
 
     case: Mapped["RefundCase"] = relationship(back_populates="review_tasks")
@@ -178,7 +217,7 @@ class IdempotencyRecord(Base):
     idempotency_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     request_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA-256(请求体)
     response_json: Mapped[dict | None] = mapped_column(JSONB)  # 首次处理结果，重复请求直接返回
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
 
 
 class RefundRecord(Base):
@@ -194,7 +233,7 @@ class RefundRecord(Base):
     status: Mapped[str] = mapped_column(String(20), default="PENDING")  # PENDING/SUCCESS/FAILED
     retry_count: Mapped[int] = mapped_column(Integer, default=0)
     idempotency_key: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
 
 
 class User(Base):
@@ -208,7 +247,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), nullable=False)  # CSR / MANAGER / ADMIN
     display_name: Mapped[str] = mapped_column(String(64), nullable=False)
     is_active: Mapped[bool] = mapped_column(default=True)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
 
 
 class AuditLog(Base):
@@ -224,7 +263,7 @@ class AuditLog(Base):
     to_status: Mapped[str | None] = mapped_column(String(20))
     operator: Mapped[str | None] = mapped_column(String(64))
     idempotency_key: Mapped[str | None] = mapped_column(String(64))
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
 
 
 # ---------- 买家侧电商前台（v2.0 §6.1，金额一律 BIGINT 分） ----------
@@ -240,7 +279,7 @@ class Customer(Base):
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     nickname: Mapped[str | None] = mapped_column(String(64))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)  # 管理员停用后禁止登录
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
 
 
 class Product(Base):
@@ -274,7 +313,7 @@ class CartItem(Base):
         BigInteger, ForeignKey("products.id"), nullable=False, index=True
     )
     quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
 
     customer: Mapped["Customer"] = relationship("Customer")
     product: Mapped["Product"] = relationship("Product")
@@ -294,9 +333,9 @@ class Order(Base):
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, default=OrderStatus.PENDING_PAYMENT.value
     )
-    created_at: Mapped[datetime] = mapped_column(server_default=func.now())
-    paid_at: Mapped[datetime | None] = mapped_column()
-    refunded_at: Mapped[datetime | None] = mapped_column()
+    created_at: Mapped[datetime] = mapped_column(UTCDateTime(), server_default=func.now())
+    paid_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
+    refunded_at: Mapped[datetime | None] = mapped_column(UTCDateTime())
 
     customer: Mapped["Customer"] = relationship("Customer")
     items: Mapped[list["OrderItem"]] = relationship(
